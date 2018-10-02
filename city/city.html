@@ -1,0 +1,32 @@
+<html>
+<head>
+	<title>untitled</title>
+	<script src="city.js"></script>
+	<script src="tile_map.js"></script>
+</head>
+
+<body>
+
+<div id="dbg" style="display: block;">
+</div>
+
+
+<script>
+	var myCity = new city({
+			size: [100, 50],	// [x,y]
+			middle: 5,
+			houses: { 
+				min: [1,1], 
+				max: [8,4] 
+			},
+			f: {
+				type: "lsystem",
+			},
+		});
+	
+	var map = new tileMap (document.getElementById("dbg"));
+		map.display(myCity.get())
+</script>	
+</body>
+
+</html>
