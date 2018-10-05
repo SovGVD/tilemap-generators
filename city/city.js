@@ -150,14 +150,15 @@ var city = function (c) {
 		var tmp = [];
 		for (var i = 0; i < this.blocks.length; i++) {
 			if (this.blocks[i] !== false) {
-				// add it to the list randomly
-				if (Math.random()>0.5) {
-					tmp.push(this.blocks[i]);
-				} else {
-					tmp.unshift(this.blocks[i]);
-				}
+				tmp.push(this.blocks[i]);
 				if (max_id < this.blocks[i][4]) max_id=this.blocks[i][4];
 			}
+		}
+		for (var i = tmp.length - 1; i > 0; i--) {
+			var j = Math.floor(Math.random() * (i + 1));
+			var temp = tmp[i];
+			tmp[i] = tmp[j];
+			tmp[j] = temp;
 		}
 		this.blocks = tmp;
 
