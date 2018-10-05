@@ -2,6 +2,7 @@
 <head>
 	<title>untitled</title>
 	<script src="city.js"></script>
+	<script src="astar.js"></script>
 	<script src="tile_map.js"></script>
 </head>
 
@@ -13,12 +14,51 @@
 
 <script>
 	var myCity = new city({
-			size: [100, 50],	// [x,y]
-			middle: 5,
-			houses: { 
-				min: [1,1], 
-				max: [8,4] 
+			size: [100, 100],	// [x,y]
+			middle: {
+					id: "fontain", // set something in the middle
+				},	
+			buildings: { 
+				min: [1,1,1], // w, h, stairs
+				max: [8,8,3],
+				space_between_buildings: 1,
+				types: [	
+					// the biggest side (w or h) should be first, e.g 8-4-3, and not 4-8-3, stairs does not metter, 
+					// also building should be ordered by priority but be careful, if the first one will be 1x1, 2x3 will not selected,
+					// so basicaly it is better to sort it by size
+					{ size: [8,8,3], type: "house_one" },
+					{ size: [8,4,3], type: "house_big" },
+					{ size: [4,8,3], type: "house_big.rotated" },
+					{ size: [2,4,3], type: "house_medium" },
+					{ size: [1,2,1], type: "house_small" }
+				],
+				limits: {
+					types: {
+						'house_one': { max: 1 },
+						'house_big': { max: 30 },
+						'house_big.rotated': { max: 30 },
+						'house_medium': { max: 0 },
+						'house_small': { max: 0 },
+					}
+				}
 			},
+			roads: {
+				small: {
+					size: 1,
+					iterations: [6, 100000],
+					walkable: 0.8,
+					},
+				highway: {
+					size: 4,
+					iterations: [1, 2],
+					walkable: 1,
+					},
+				main: {
+					size: 2,
+					iterations: [3, 5],
+					walkable: 1,
+					}
+				},
 			f: {
 				type: "lsystem",
 			},
