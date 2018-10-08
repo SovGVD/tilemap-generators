@@ -6,6 +6,11 @@ var city = function (c) {
 	this.blocks = [];
 	this.id = false;
 	this.count_objects = { };
+	this.last_object = {
+			id: 0,
+			pos: [-1,-1],
+			obj: false 
+		};
 	
 	this.init = function () {
 		this.m = []; this.w = [];
@@ -226,7 +231,10 @@ var city = function (c) {
 		var fitted = true;
 		for (var y = pos[1]; y < pos[1]+obj.size[1]; y++) {
 			for (var x = pos[0]; x < pos[0]+obj.size[0]; x++) {
-				if (this.m[y][x].id > 0 && !(obj.merge && typeof this.m[y][x].sub_type != 'undefined' && this.m[y][x].type == type && this.m[y][x].sub_type == obj.type)) {
+				if (!this._gen_check_onmap([x,y])) {
+					fitted = false;
+					break;
+				} else if (this.m[y][x].id > 0 && !(obj.merge && typeof this.m[y][x].sub_type != 'undefined' && this.m[y][x].type == type && this.m[y][x].sub_type == obj.type)) {
 					fitted = false;
 					break;
 				}
@@ -291,8 +299,16 @@ var city = function (c) {
 		return true;
 	}
 	
-	this._gen_set_object = function (type, pos, obj) {
-		this.id++;
+	this._gen_set_object = function (type, pos, obj, force_id) {
+		if (force_id > 0) {
+			this.id = force_id;
+		} else {
+			this.id++;
+		}
+		this.last_object.pos = pos;
+		this.last_object.obj = obj,
+		this.last_object.type = type;
+		this.last_object.id = parseInt(this.id);
 		for (var y = pos[1]; y < pos[1]+obj.size[1]; y++) {
 			for (var x = pos[0]; x < pos[0]+obj.size[0]; x++) {
 				this.m[y][x].id = this.id;
@@ -345,8 +361,13 @@ var city = function (c) {
 		var l = 100;	// limit random process to `l` iterations
 		var pos = [-1,-1];
 		while (l>0) {
-			rnd_x = Math.round(this.rnd(b[0], b[2]-obj.size[0]));
-			rnd_y = Math.round(this.rnd(b[1], b[3]-obj.size[1]));
+			if (obj.merge && this.last_object.obj != false && this.last_object.obj.type == obj.type) {
+				rnd_x = Math.round(this.rnd(this.last_object.pos[0]-obj.size[0]*0.5, this.last_object.pos[0]+obj.size[0]*0.5));
+				rnd_y = Math.round(this.rnd(this.last_object.pos[1]-obj.size[1]*0.5, this.last_object.pos[1]+obj.size[1]*0.5));
+			} else {
+				rnd_x = Math.round(this.rnd(b[0], b[2]-obj.size[0]));
+				rnd_y = Math.round(this.rnd(b[1], b[3]-obj.size[1]));
+			}
 			pos = [rnd_x, rnd_y];
 			if ( 
 				this._gen_check_collission("decorations", pos, obj) && 
@@ -354,7 +375,11 @@ var city = function (c) {
 				this._gen_check_border("decorations", pos, obj, this.c.decorations.space_between_items, 'any') &&
 				this._gen_check_limit ("decorations", obj)
 			) {
-				this._gen_set_object("decorations", pos, obj);
+				if (obj.merge && this.last_object.obj != false && this.last_object.obj.type == obj.type) {
+					this._gen_set_object("decorations", pos, obj, this.last_object.id);
+				} else {
+					this._gen_set_object("decorations", pos, obj);
+				}
 				fitted = true;
 				l=-1;
 			}
@@ -476,6 +501,12 @@ var city = function (c) {
 			// special object (decorations) inside block
 			for (var b = 0; b < this.c.decorations.types.length; b++) {
 				b_limit = 1000;
+				this.last_object = { 
+						id: 0,
+						pos: [-1,-1],
+						obj: false 
+					};
+
 				if (Math.random() > 1-this.c.decorations.types[b].value) {
 					while (b_limit > 0 && this._gen_decorations_blocks_fit(this.blocks[i], this.c.decorations.types[b])) { 
 						b_limit--; 
