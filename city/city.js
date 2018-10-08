@@ -311,13 +311,15 @@ var city = function (c) {
 		this.last_object.id = parseInt(this.id);
 		for (var y = pos[1]; y < pos[1]+obj.size[1]; y++) {
 			for (var x = pos[0]; x < pos[0]+obj.size[0]; x++) {
-				this.m[y][x].id = this.id;
-				this.m[y][x].type = type;
-				this.m[y][x].sub_type = obj.type;
-				if (typeof obj.walkable_map == 'object') {
-					this.w[y][x] = obj.walkable_map[y-pos[1]][x-pos[0]];
-				} else {
-					this.w[y][x] = 0;	// TODO chech walkable map
+				if (typeof obj.object_map == 'undefined' || obj.object_map === false || obj.object_map[y-pos[1]][x-pos[0]] == 1) {
+					this.m[y][x].id = this.id;
+					this.m[y][x].type = type;
+					this.m[y][x].sub_type = obj.type;
+					if (typeof obj.walkable_map == 'object') {
+						this.w[y][x] = obj.walkable_map[y-pos[1]][x-pos[0]];
+					} else {
+						this.w[y][x] = 0;	// TODO chech walkable map
+					}
 				}
 			}
 		}
