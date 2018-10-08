@@ -314,7 +314,11 @@ var city = function (c) {
 				this.m[y][x].id = this.id;
 				this.m[y][x].type = type;
 				this.m[y][x].sub_type = obj.type;
-				this.w[y][x] = 0;	// TODO chech walkable map
+				if (typeof obj.walkable_map == 'object') {
+					this.w[y][x] = obj.walkable_map[y-pos[1]][x-pos[0]];
+				} else {
+					this.w[y][x] = 0;	// TODO chech walkable map
+				}
 			}
 		}
 	}
