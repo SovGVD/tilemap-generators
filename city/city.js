@@ -49,12 +49,10 @@ var city = function (c) {
 				//}
 			}
 		}
-		if (this.c.f.type == 'lsystem') {
-			this.gen_road_lsystem(Math.random()>0.5?true:false, [0 ,0 , parseInt(this.c.size[0])-1, parseInt(this.c.size[1])-1, 2]);
-		}
+		this.gen_road_lsystem(Math.random()>0.5?true:false, [0 ,0 , parseInt(this.c.size[0])-1, parseInt(this.c.size[1])-1, 2]);
 		this.id = this.gen_buildings_blocks_clear();
-		this.gen_buildings_blocks();	
-		this.gen_finish();	
+		this.gen_buildings_blocks();
+		this.gen_finish();
 	}
 	
 	this.get = function () {
@@ -146,7 +144,7 @@ var city = function (c) {
 				|       |
 				+-------+
 				|       |
-				+-------+		
+				+-------+
 			*/
 			var new_id = id+1;
 			this.gen_road_lsystem(!flag, [ flag?d:x0, flag?y0:d, x1, y1, new_id ]);
@@ -318,7 +316,7 @@ var city = function (c) {
 					if (typeof obj.walkable_map == 'object') {
 						this.w[y][x] = obj.walkable_map[y-pos[1]][x-pos[0]];
 					} else {
-						this.w[y][x] = 0;	// TODO chech walkable map
+						this.w[y][x] = 0;
 					}
 				}
 			}
@@ -391,13 +389,13 @@ var city = function (c) {
 			}
 			l--;
 		}
-		return fitted;		
+		return fitted;
 	}
 
 	this._gen_buildings_blocks_fit = function (b, building, step) {
 		var fitted = false;
 		var delta_road = Math.round(this.c.buildings.space_to_road);
-				
+		
 		// set corners
 		if (step == 'corners') {
 			var tmp = this.shuffle(['topleft', 'topright', 'bottomleft', 'bottomright']);

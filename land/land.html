@@ -1,0 +1,43 @@
+<html>
+<head>
+	<title>untitled</title>
+	<script src="canvasTerrain.js"></script>
+	<script src="land.js"></script>
+	<script src="tile_map.js"></script>
+</head>
+
+<body>
+
+<div id="dbg" style="display: block;">
+</div>
+
+
+<script>
+	var myLand = new land({
+			size: [128, 128],	// [w,h]
+			roughness: 6,
+			levels: [
+					{ type: "water", values: [0, 0.35], walkable: 0 },	// [min, max]
+					{ type: "ground", values: [0.35, 0.9], walkable: 1 },
+					{ type: "rock", values: [0.9, 0.95], walkable: 0.7 },
+					{ type: "snow", values: [0.95, 1], walkable: 0.5 }
+				],
+			water: {	// TODO
+				level: 0.349,	// maximal water level
+				distance: 10,
+				top: true,
+				bottom: true,
+				left: true,
+				right: true,
+			},
+			rivers: {
+			},
+			city: true
+		});
+	
+	var map = new tileMap (document.getElementById("dbg"));
+		map.display(myLand.get())
+</script>	
+</body>
+
+</html>

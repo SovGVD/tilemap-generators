@@ -2,7 +2,6 @@
 <head>
 	<title>untitled</title>
 	<script src="city.js"></script>
-	<script src="astar.js"></script>
 	<script src="tile_map.js"></script>
 </head>
 
@@ -14,7 +13,7 @@
 
 <script>
 	var myCity = new city({
-			size: [128, 128],	// [x,y]
+			size: [128, 128],	// [w,h]
 			buildings: { 
 				space_between_items: 1,	// space between buildings
 				space_to_road: 1,
@@ -120,7 +119,6 @@
 					'decorations.tree.1': { max: -1, max_per_block: 40 },
 				}
 			},
-
 			roads: {
 				small: {
 					size: 1,
@@ -138,12 +136,6 @@
 					walkable: 1,
 					}
 				},
-			rivers: {
-				
-			},
-			f: {
-				type: "lsystem",
-			},
 		});
 	
 	var map = new tileMap (document.getElementById("dbg"));
