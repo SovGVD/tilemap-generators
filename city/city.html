@@ -15,9 +15,6 @@
 <script>
 	var myCity = new city({
 			size: [128, 128],	// [x,y]
-			middle: {
-					id: "fontain", // set something in the middle TODO
-				},	
 			buildings: { 
 				space_between_items: 1,	// space between buildings
 				space_to_road: 1,
@@ -60,9 +57,16 @@
 							[0,0,0,0,0],
 							[0,0,0,0,1],
 							[1,0,0,1,1],
+						],
+						object_map: [
+							[0,0,1,1,0],
+							[0,1,1,1,1],
+							[1,1,1,1,1],
+							[1,1,1,1,0],
+							[0,1,1,0,0],
 						] },
 					{ type: "statue.1", 
-						size: [3,2], 
+						size: [1,2], 
 						value: 1,
 						distance: [0, 50],
 						merge: false,
@@ -87,6 +91,12 @@
 						value: 1,
 						distance: [60,100],
 						merge: true,
+						walkable_map: false },
+					{ type: "tree.1", 
+						size: [1,1], 
+						value: 0.8,
+						distance: [0,100],
+						merge: false,
 						walkable_map: false }
 
 					]
@@ -107,6 +117,7 @@
 					'decorations.statue.1': { max: -1, max_per_block: 4 },
 					'decorations.pound.1': { max: 3, max_per_block: 4 },
 					'decorations.pound.2': { max: -1, max_per_block: 20 },
+					'decorations.tree.1': { max: -1, max_per_block: 40 },
 				}
 			},
 

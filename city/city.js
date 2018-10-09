@@ -54,7 +54,7 @@ var city = function (c) {
 		}
 		this.id = this.gen_buildings_blocks_clear();
 		this.gen_buildings_blocks();	
-		//this.gen_finish();	
+		this.gen_finish();	
 	}
 	
 	this.get = function () {
