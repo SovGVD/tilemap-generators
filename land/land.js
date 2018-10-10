@@ -3,13 +3,22 @@ var land = function (c) {
 	this.m = false;	// map
 	this.w = false;	// walkable
 	this.id = false;
-	this.rivers_map = [];
-
-// TODO
-// save rivers map an update it	
+	this.rivers_map = false;
+	this.sand_map = false;
 
 	this.init = function () {
 		this.m = []; this.w = [];
+		this.rivers_map = [];
+		this.sand_map = [];
+
+		for (var y=0;y<this.c.size[1];y++) {
+			this.rivers_map[y] = [];
+			this.sand_map[y] = [];
+			for (var x=0;x<this.c.size[0];x++) {
+				this.rivers_map[y][x] = 0;
+				this.sand_map[y][x] = 0;
+			}
+		}
 
 		var tmp = generateTerrainMap(this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1], 1, this.c.roughness);
 		tmp = this._smooth(tmp,this.c.smooth);
@@ -18,12 +27,6 @@ var land = function (c) {
 		if (this.c.coast.left)   this.water_border(tmp, 'left');
 		if (this.c.coast.right)  this.water_border(tmp, 'right');
 		tmp = this._smooth(tmp, 1);
-		for (var y=0;y<this.c.size[1];y++) {
-			this.rivers_map[y] = [];
-			for (var x=0;x<this.c.size[0];x++) {
-				this.rivers_map[y][x] = 0;
-			}
-		}
 		
 		this.river(tmp);
 		
@@ -36,23 +39,21 @@ var land = function (c) {
 				this.w[y][x] = t.w;
 			}
 		}
-		if (this.c.coast.top)    this.sand_border('top');
-		if (this.c.coast.bottom) this.sand_border('bottom');
-		if (this.c.coast.left)   this.sand_border('left');
-		if (this.c.coast.right)  this.sand_border('right');
+		this.restore();
 		this.clean();
-		this.restore_rivers();
 	}
 	
 	this.get = function () {
 		return { map: this.m, walk: this.w };
 	}
 	
-	this.restore_rivers = function () {
+	this.restore = function () {
 		for (var y=0;y<this.c.size[1];y++) {
 			for (var x=0;x<this.c.size[0];x++) {
 				if (this.rivers_map[y][x] > 0) {
 					this.m[y][x].type = 'river';
+				} else if (this.sand_map[y][x] > 0 && this.m[y][x].type == 'ground') {
+					this.m[y][x].type = 'sand';
 				}
 			}
 		}
@@ -229,56 +230,6 @@ var land = function (c) {
 		}
 	}
 	
-	this.sand_border = function (where) {
-		// TODO optimize this copy-paste and don't draw on rivers
-		if (where == 'left' || where == 'right') {
-			var s = this.rnd(1,this.c.size[1]-1);
-			var l = this.rnd(s,this.c.size[1]-1)-s;
-			for (var y=s;y<s+l;y++) {
-				if (where == 'left') {
-					for (var x=1;x<this.c.size[0]-1;x++) {
-						if (((this.m[y][x-1].type == 'water' || this.m[y][x-1].type == 'deepwater') && this.m[y][x].type == 'ground')) {
-							this.m[y][x-1].type = 'water';
-							for (var i=0; i<this.rnd(1,2); i++) { this.m[y][x+i].type = 'sand'; }
-							break;
-						}
-					}
-				}
-				if (where == 'right') {
-					for (var x=this.c.size[0]-2;x>1;x--) {
-						if (((this.m[y][x].type == 'water' || this.m[y][x].type == 'deepwater') && this.m[y][x-1].type == 'ground')) {
-							this.m[y][x+1].type = 'water';
-							for (var i=0; i<this.rnd(1,2); i++) { this.m[y][x-i].type = 'sand'; }
-							break;
-						}
-					}
-				}
-			}
-		} else {
-			var s = this.rnd(1,this.c.size[0]-1);
-			var l = this.rnd(s,this.c.size[0]-1)-s;
-			for (var x=s;x<s+l;x++) {
-				if (where == 'top') {
-					for (var y=1;y<this.c.size[1]-1;y++) {
-						if (((this.m[y-1][x].type == 'water' || this.m[y-1][x].type == 'deepwater') && this.m[y][x].type == 'ground')) {
-							this.m[y-1][x].type = 'water';
-							for (var i=0; i<this.rnd(1,2); i++) { this.m[y+i][x].type = 'sand'; }
-							break;
-						}
-					}
-				}
-				if (where == 'bottom') {
-					for (var y=this.c.size[1]-2;y>1;y--) {
-						if (((this.m[y][x].type == 'water' || this.m[y][x].type == 'deepwater') && this.m[y-1][x].type == 'ground')) {
-							this.m[y+1][x].type = 'water';
-							for (var i=0; i<this.rnd(1,2); i++) { this.m[y-i][x].type = 'sand'; }
-							break;
-						}
-					}
-				}
-			}
-		}
-	}
 	
 	this.water_border = function (map, where) {
 		var g = [ [0,0], [0,0], [0,0] ];	// { [x0,y0], [x1,y1], [min,max] }
@@ -295,17 +246,17 @@ var land = function (c) {
 			if (d < rnd_vals[0]) d = rnd_vals[0];
 			pre = d;
 			if (where == 'top') {
-				this._gradient(map, [ [i,0], [i,d], [0, this.c.coast.level] ], true);
+				this._gradient(map, [ [i,0], [i,d], [0, this.c.coast.level] ], true, 'set_sand');
 			} else if (where == 'bottom') {
-				this._gradient(map, [ [i,s], [i,d], [0, this.c.coast.level] ], true);
+				this._gradient(map, [ [i,s], [i,d], [0, this.c.coast.level] ], true, 'set_sand');
 			} else if (where == 'left') {
-				this._gradient(map, [ [0,i], [d,i], [0, this.c.coast.level] ], true);
+				this._gradient(map, [ [0,i], [d,i], [0, this.c.coast.level] ], true, 'set_sand');
 			} else if (where == 'right') {
-				this._gradient(map, [ [s,i], [d,i], [0, this.c.coast.level] ], true);
+				this._gradient(map, [ [s,i], [d,i], [0, this.c.coast.level] ], true, 'set_sand');
 			}
 		}
 	}
-	this._gradient = function (map, g, replace_lower) {
+	this._gradient = function (map, g, replace_lower, extra) {
 		var steps = this.distance(g[0], g[1]);
 		var d = [ (g[1][0]-g[0][0])/steps, (g[1][1]-g[0][1])/steps, (g[2][1]-g[2][0])/steps ];
 		var pos = [g[0][0], g[0][1], g[2][0]];
@@ -318,6 +269,11 @@ var land = function (c) {
 			} else {
 				map[Math.round(pos[1])][Math.round(pos[0])] = pos[2];
 			}
+			if (extra == 'set_sand' && pos[2]>g[2][1]-this.c.coast.sand) {
+				try { this.sand_map[Math.round(pos[1])][Math.round(pos[0])] = 1; } catch (e) { }
+				try { if (Math.random()>0.5) { this.sand_map[Math.round(pos[1]+d[1])][Math.round(pos[0]+d[0])] = 1;} } catch (e) { }
+			}
+
 		}
 	}
 	
