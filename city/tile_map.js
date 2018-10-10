@@ -43,7 +43,14 @@ var tileMap = function (obj) {
 			},
 			decorations: {
 				html: "*",
-				color: "blue"
+				color: "yellow",
+				types_color: {
+					'pound.1': "darkblue",
+					'pound.2': "blue",
+					'fontain': "lightblue",
+					'tree.1': "lightgreen",
+					'statue.1': "lightgray"
+				}
 			},
 			unknown : {
 				html: "?",
@@ -68,7 +75,8 @@ var tileMap = function (obj) {
 					color = this.tiles[type].types_color[sub_type];
 				}
 				//out+='<div title="'+sub_type+'" style="background-color: '+color+'; '+(walk[y][x]>0.5?'border-top: 1px dotted green; border-left: 1px dotted green; ':'margin-top:1px; margin-left:1px; ')+'display: inline-block; width:15px; height:15px; font-size: 10px;">'+(map[y][x].id==0?"&nbsp;":map[y][x].id)+'</div>';
-				out+='<div title="'+map[y][x].type+'.'+sub_type+'" style="background-color: '+color+'; display: inline-block; width:15px; height:15px; font-size: 10px;">'+(map[y][x].id==0?"&nbsp;":map[y][x].id)+'</div>';
+				//out+='<div title="'+map[y][x].type+'.'+sub_type+' w'+walk[y][x]+'" style="background-color: '+color+'; display: inline-block; width:15px; height:15px; font-size: 10px;">'+(map[y][x].id==0?"&nbsp;":map[y][x].id)+'</div>';
+				out+='<div title="'+map[y][x].type+'.'+sub_type+' w'+walk[y][x]+'" style="background-color: '+color+'; display: inline-block; width:15px; height:15px; font-size: 10px;">&nbsp;</div>';
 			}
 			out+="</div>";
 		}

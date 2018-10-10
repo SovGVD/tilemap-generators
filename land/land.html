@@ -1,0 +1,50 @@
+<html>
+<head>
+	<title>untitled</title>
+	<script src="canvasTerrain.js"></script>
+	<script src="land.js"></script>
+	<script src="/../libs/javascript-astar/astar.js"></script>
+	<script src="tile_map.js"></script>
+</head>
+
+<body>
+
+<div id="dbg" style="display: block;">
+</div>
+
+
+<script>
+	var myLand = new land({
+			size: [512, 512],	// [w,h]
+			roughness: 10,
+			smooth: 4,
+			levels: [
+					{ type: "deepwater", values: [0, 0.3], walkable: 0 },	// [min, max]
+					{ type: "water", values: [0.3, 0.35], walkable: 0 },	// [min, max]
+					{ type: "ground", values: [0.35, 0.9], walkable: 1 },	// ground will be converted into desert and swamp also
+					{ type: "rock", values: [0.9, 0.97], walkable: 0.7 },
+					{ type: "snow", values: [0.97, 1], walkable: 0.5 }
+				],
+			coast: {
+				level: 0.349,	// maximal water level
+				distance: 50,	// use also for rivers ends
+				top: true,
+				bottom: true,
+				left: true,
+				right: true,
+				sand: 0.03,	// add sand near water, delta coast.level
+			},
+			rivers: {
+				from: [ 0.89, 0.96 ],	// start rivers from this height
+				to: [0, 0.35],	// end rivers at some other water
+				max: 20,
+			},
+			city: true
+		});
+	
+	var map = new tileMap (document.getElementById("dbg"));
+		map.display(myLand.get())
+</script>	
+</body>
+
+</html>

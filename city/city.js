@@ -6,6 +6,11 @@ var city = function (c) {
 	this.blocks = [];
 	this.id = false;
 	this.count_objects = { };
+	this.last_object = {
+			id: 0,
+			pos: [-1,-1],
+			obj: false 
+		};
 	
 	this.init = function () {
 		this.m = []; this.w = [];
@@ -44,12 +49,10 @@ var city = function (c) {
 				//}
 			}
 		}
-		if (this.c.f.type == 'lsystem') {
-			this.gen_road_lsystem(Math.random()>0.5?true:false, [0 ,0 , parseInt(this.c.size[0])-1, parseInt(this.c.size[1])-1, 2]);
-		}
+		this.gen_road_lsystem(Math.random()>0.5?true:false, [0 ,0 , parseInt(this.c.size[0])-1, parseInt(this.c.size[1])-1, 2]);
 		this.id = this.gen_buildings_blocks_clear();
-		this.gen_buildings_blocks();	
-		//this.gen_finish();	
+		this.gen_buildings_blocks();
+		this.gen_finish();
 	}
 	
 	this.get = function () {
@@ -141,7 +144,7 @@ var city = function (c) {
 				|       |
 				+-------+
 				|       |
-				+-------+		
+				+-------+
 			*/
 			var new_id = id+1;
 			this.gen_road_lsystem(!flag, [ flag?d:x0, flag?y0:d, x1, y1, new_id ]);
@@ -226,7 +229,10 @@ var city = function (c) {
 		var fitted = true;
 		for (var y = pos[1]; y < pos[1]+obj.size[1]; y++) {
 			for (var x = pos[0]; x < pos[0]+obj.size[0]; x++) {
-				if (this.m[y][x].id > 0 && !(obj.merge && typeof this.m[y][x].sub_type != 'undefined' && this.m[y][x].type == type && this.m[y][x].sub_type == obj.type)) {
+				if (!this._gen_check_onmap([x,y])) {
+					fitted = false;
+					break;
+				} else if (this.m[y][x].id > 0 && !(obj.merge && typeof this.m[y][x].sub_type != 'undefined' && this.m[y][x].type == type && this.m[y][x].sub_type == obj.type)) {
 					fitted = false;
 					break;
 				}
@@ -291,14 +297,28 @@ var city = function (c) {
 		return true;
 	}
 	
-	this._gen_set_object = function (type, pos, obj) {
-		this.id++;
+	this._gen_set_object = function (type, pos, obj, force_id) {
+		if (force_id > 0) {
+			this.id = force_id;
+		} else {
+			this.id++;
+		}
+		this.last_object.pos = pos;
+		this.last_object.obj = obj,
+		this.last_object.type = type;
+		this.last_object.id = parseInt(this.id);
 		for (var y = pos[1]; y < pos[1]+obj.size[1]; y++) {
 			for (var x = pos[0]; x < pos[0]+obj.size[0]; x++) {
-				this.m[y][x].id = this.id;
-				this.m[y][x].type = type;
-				this.m[y][x].sub_type = obj.type;
-				this.w[y][x] = 0;	// TODO chech walkable map
+				if (typeof obj.object_map == 'undefined' || obj.object_map === false || obj.object_map[y-pos[1]][x-pos[0]] == 1) {
+					this.m[y][x].id = this.id;
+					this.m[y][x].type = type;
+					this.m[y][x].sub_type = obj.type;
+					if (typeof obj.walkable_map == 'object') {
+						this.w[y][x] = obj.walkable_map[y-pos[1]][x-pos[0]];
+					} else {
+						this.w[y][x] = 0;
+					}
+				}
 			}
 		}
 	}
@@ -345,8 +365,13 @@ var city = function (c) {
 		var l = 100;	// limit random process to `l` iterations
 		var pos = [-1,-1];
 		while (l>0) {
-			rnd_x = Math.round(this.rnd(b[0], b[2]-obj.size[0]));
-			rnd_y = Math.round(this.rnd(b[1], b[3]-obj.size[1]));
+			if (obj.merge && this.last_object.obj != false && this.last_object.obj.type == obj.type) {
+				rnd_x = Math.round(this.rnd(this.last_object.pos[0]-obj.size[0]*0.5, this.last_object.pos[0]+obj.size[0]*0.5));
+				rnd_y = Math.round(this.rnd(this.last_object.pos[1]-obj.size[1]*0.5, this.last_object.pos[1]+obj.size[1]*0.5));
+			} else {
+				rnd_x = Math.round(this.rnd(b[0], b[2]-obj.size[0]));
+				rnd_y = Math.round(this.rnd(b[1], b[3]-obj.size[1]));
+			}
 			pos = [rnd_x, rnd_y];
 			if ( 
 				this._gen_check_collission("decorations", pos, obj) && 
@@ -354,19 +379,23 @@ var city = function (c) {
 				this._gen_check_border("decorations", pos, obj, this.c.decorations.space_between_items, 'any') &&
 				this._gen_check_limit ("decorations", obj)
 			) {
-				this._gen_set_object("decorations", pos, obj);
+				if (obj.merge && this.last_object.obj != false && this.last_object.obj.type == obj.type) {
+					this._gen_set_object("decorations", pos, obj, this.last_object.id);
+				} else {
+					this._gen_set_object("decorations", pos, obj);
+				}
 				fitted = true;
 				l=-1;
 			}
 			l--;
 		}
-		return fitted;		
+		return fitted;
 	}
 
 	this._gen_buildings_blocks_fit = function (b, building, step) {
 		var fitted = false;
 		var delta_road = Math.round(this.c.buildings.space_to_road);
-				
+		
 		// set corners
 		if (step == 'corners') {
 			var tmp = this.shuffle(['topleft', 'topright', 'bottomleft', 'bottomright']);
@@ -476,6 +505,12 @@ var city = function (c) {
 			// special object (decorations) inside block
 			for (var b = 0; b < this.c.decorations.types.length; b++) {
 				b_limit = 1000;
+				this.last_object = { 
+						id: 0,
+						pos: [-1,-1],
+						obj: false 
+					};
+
 				if (Math.random() > 1-this.c.decorations.types[b].value) {
 					while (b_limit > 0 && this._gen_decorations_blocks_fit(this.blocks[i], this.c.decorations.types[b])) { 
 						b_limit--; 
