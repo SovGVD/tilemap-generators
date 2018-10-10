@@ -3,7 +3,11 @@ var land = function (c) {
 	this.m = false;	// map
 	this.w = false;	// walkable
 	this.id = false;
-	
+	this.rivers_map = [];
+
+// TODO
+// save rivers map an update it	
+
 	this.init = function () {
 		this.m = []; this.w = [];
 
@@ -14,6 +18,12 @@ var land = function (c) {
 		if (this.c.coast.left)   this.water_border(tmp, 'left');
 		if (this.c.coast.right)  this.water_border(tmp, 'right');
 		tmp = this._smooth(tmp, 1);
+		for (var y=0;y<this.c.size[1];y++) {
+			this.rivers_map[y] = [];
+			for (var x=0;x<this.c.size[0];x++) {
+				this.rivers_map[y][x] = 0;
+			}
+		}
 		
 		this.river(tmp);
 		
@@ -31,10 +41,21 @@ var land = function (c) {
 		if (this.c.coast.left)   this.sand_border('left');
 		if (this.c.coast.right)  this.sand_border('right');
 		this.clean();
+		this.restore_rivers();
 	}
 	
 	this.get = function () {
 		return { map: this.m, walk: this.w };
+	}
+	
+	this.restore_rivers = function () {
+		for (var y=0;y<this.c.size[1];y++) {
+			for (var x=0;x<this.c.size[0];x++) {
+				if (this.rivers_map[y][x] > 0) {
+					this.m[y][x].type = 'river';
+				}
+			}
+		}
 	}
 
 	this.clean = function () {
@@ -189,16 +210,21 @@ var land = function (c) {
 		var step = 1.5/(river.length-1);	// first value is the bigest brush "radius" ("square" radius, I don't want to use sin/cos)
 		for (var j = 0; j < river.length; j++) {
 			if (map[river[j].y][river[j].x]>water_value) {
-				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value);
+				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river');
 			}
 		}
 	}
 	
-	this._depth_brush = function (map, pos, r, depth) {
-		//r = Math.round(r);
+	this._depth_brush = function (map, pos, r, depth, type) {
+		var bpos = [0,0];
 		for (var ny = pos[1]-r; ny <= pos[1]+r; ny++) {
 			for (var nx = pos[0]-r; nx <= pos[0]+r; nx++) {
-				map[Math.round(ny)][Math.round(nx)] = depth;
+				bpos = [Math.round(nx), Math.round(ny)];
+				map[bpos[1]][bpos[0]] = depth;
+				if (type == 'river') {
+					// TODO set ID of the river?
+					try {this.rivers_map[bpos[1]][bpos[0]]=1;} catch (e) { /* nah */ }
+				}
 			}
 		}
 	}
