@@ -34,6 +34,10 @@ var tileMap = function (obj) {
 				html: "-",
 				color: "yellow"
 			},
+			desert: {
+				html: "-",
+				color: "peru"
+			},
 			snow: {
 				html: "*",
 				color: "white"
@@ -48,7 +52,7 @@ var tileMap = function (obj) {
 			},
 			unknown : {
 				html: "?",
-				color: "yellow"
+				color: "pink"
 			},
 		},
 	

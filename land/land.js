@@ -5,8 +5,18 @@ var land = function (c) {
 	this.id = false;
 	this.rivers_map = false;
 	this.sand_map = false;
+	this.moisture_map = false;
+	this.count_levels = 0;
+	this.ms = new Date().getTime();
+	
+	this._dbg_timer = function (txt) {
+		var tmp = new Date().getTime();
+		console.log("Time: ["+txt+"]", tmp - this.ms);
+		this.ms = tmp;
+	}
 
 	this.init = function () {
+		this.count_levels = this.c.levels.length;
 		this.m = []; this.w = [];
 		this.rivers_map = [];
 		this.sand_map = [];
@@ -19,16 +29,26 @@ var land = function (c) {
 				this.sand_map[y][x] = 0;
 			}
 		}
+		this._dbg_timer("map1");
 
 		var tmp = generateTerrainMap(this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1], 1, this.c.roughness);
+		this._dbg_timer("terrain");
 		tmp = this._smooth(tmp,this.c.smooth);
+		this._dbg_timer("terrain smooth");
 		if (this.c.coast.top)    this.water_border(tmp, 'top');
 		if (this.c.coast.bottom) this.water_border(tmp, 'bottom');
 		if (this.c.coast.left)   this.water_border(tmp, 'left');
 		if (this.c.coast.right)  this.water_border(tmp, 'right');
+		this._dbg_timer("water border");
 		tmp = this._smooth(tmp, 1);
+		this._dbg_timer("smooth again");
 		
 		this.river(tmp);
+		this._dbg_timer("rivers");
+		this.moisture_map = this._binary_map(tmp, ['water','deepwater'], 1, this.c.size[0]/15);
+		this._dbg_timer("moisture binary map");
+		this.moisture_map = this._smooth(this.moisture_map,this.c.smooth*2);
+		this._dbg_timer("moisture smooth");
 		
 		var t = false;
 		for (var y=0;y<this.c.size[1];y++) {
@@ -39,12 +59,69 @@ var land = function (c) {
 				this.w[y][x] = t.w;
 			}
 		}
+		this._dbg_timer("map2");
 		this.restore();
+		this._dbg_timer("restore");
+		this.expand_ground_types();
+		this._dbg_timer("expand");
 		this.clean();
+		this._dbg_timer("clean");
+		tmp = null;
 	}
 	
 	this.get = function () {
 		return { map: this.m, walk: this.w };
+	}
+	
+	this._invert = function (map) {
+		for (var y=0;y<map.length;y++) {
+			for (var x=0;x<map[y].length;x++) {
+				map[y][x]=1-map[y][x];
+			}
+		}
+		return map;
+	}
+	
+	this._binary_map = function (map, binary_types, fill_border, expand) {
+		var t = false;
+		var newmap = [];
+		var nnewmap = [];
+		var l=map.length;
+		for (var y=0;y<l;y++) {
+			newmap[y] = [];
+			nnewmap[y] = [];
+			for (var x=0;x<l;x++) {
+				t = this.data_by_level(map[y][x]);
+				if (binary_types.indexOf(t.type) > -1) {
+					newmap[y][x] = 1;
+					nnewmap[y][x] = 1;
+				} else {
+					newmap[y][x] = 0;
+					nnewmap[y][x] = 0;
+				}
+			}
+		}
+		this._dbg_timer("moisture binary map init");
+		var d = 2;	// dramaticaly speed up
+		for (var y=0;y<l;y=y+d) {
+			for (var x=0;x<l;x=x+d) {
+				if (newmap[y][x] == 1) this._depth_brush (nnewmap, [x,y], expand, 1, false);
+			}
+		}
+		newmap = null;
+		return nnewmap;
+	}
+	
+	this.expand_ground_types = function () {
+		for (var y=0;y<this.c.size[1];y++) {
+			for (var x=0;x<this.c.size[0];x++) {
+				if (this.m[y][x].type == 'ground') {
+					if (this.moisture_map[y][x] < 0.35) {
+						this.m[y][x].type = 'desert';
+					}
+				}
+			}
+		}
 	}
 	
 	this.restore = function () {
@@ -105,12 +182,14 @@ var land = function (c) {
 			}
 		}
 		tmp = null;
+		this.sand_map = false;
+		this.moisture_map = false;
 	}
 
 	this.data_by_level = function (level) {
 		if (level < 0) level = 0;
 		if (level > 1) level = 1;
-		for (var i = 0; i < this.c.levels.length; i++) {
+		for (var i = 0; i < this.count_levels; i++) {
 			if (this.c.levels[i].values[0]<=level && (this.c.levels[i].values[1]>level || (this.c.levels[i].values[1]>=level && this.c.levels[i].values[1] === 1))) {
 				return { type: this.c.levels[i].type, w: this.c.levels[i].walkable };
 			}
@@ -218,10 +297,18 @@ var land = function (c) {
 	
 	this._depth_brush = function (map, pos, r, depth, type) {
 		var bpos = [0,0];
-		for (var ny = pos[1]-r; ny <= pos[1]+r; ny++) {
-			for (var nx = pos[0]-r; nx <= pos[0]+r; nx++) {
-				bpos = [Math.round(nx), Math.round(ny)];
-				map[bpos[1]][bpos[0]] = depth;
+		var b = {
+				ny_min: Math.round(pos[1]-r),
+				ny_max: Math.round(pos[1]+r),
+				nx_min: Math.round(pos[0]-r),
+				nx_max: Math.round(pos[0]+r)
+			};
+		for (var ny = b.ny_min; ny <= b.ny_max ; ny++) {
+			for (var nx = b.nx_min; nx <= b.nx_max; nx++) {
+				//bpos = [Math.round(nx), Math.round(ny)];
+				//bpos = [parseInt(nx), parseInt(ny)];
+				bpos = [nx, ny];
+				if (bpos[0]>=0 && bpos[1]>=0 && bpos[0]<this.c.size[0] && bpos[1]<this.c.size[1]) {map[bpos[1]][bpos[0]] = depth;}
 				if (type == 'river') {
 					// TODO set ID of the river?
 					try {this.rivers_map[bpos[1]][bpos[0]]=1;} catch (e) { /* nah */ }
@@ -279,9 +366,10 @@ var land = function (c) {
 	
 	this._smooth = function (map, v) {
 		var newmap = [];
-		for (var y=0;y<map.length;y++) {
+		var l = map.length
+		for (var y=0;y<l;y++) {
 			newmap[y] = [];
-			for (var x=0;x<map[y].length;x++) {
+			for (var x=0;x<l;x++) {
 				newmap[y][x] = this._smooth_avg(map , [x,y], v);
 			}
 		}
@@ -291,8 +379,14 @@ var land = function (c) {
 	this._smooth_avg = function (map, pos, d) {
 		var s = 0;
 		var c = 0;
-		for (var y = pos[1]-d; y <= pos[1]+d; y++) {
-			for (var x = pos[0]-d; x <= pos[0]+d; x++) {
+		var b = {
+				ny_min: pos[1]-d,
+				ny_max: pos[1]+d,
+				nx_min: pos[0]-d,
+				nx_max: pos[0]+d
+			};
+		for (var y = b.ny_min; y <= b.ny_max; y++) {
+			for (var x = b.nx_min; x <= b.nx_max; x++) {
 				if (typeof map[y] != 'undefined' && typeof[map[y][x]] != 'undefined' && map[y][x]<=1 && map[y][x]>=0) {
 					s += map[y][x];
 					c++;
