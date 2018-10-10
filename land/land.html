@@ -3,6 +3,7 @@
 	<title>untitled</title>
 	<script src="canvasTerrain.js"></script>
 	<script src="land.js"></script>
+	<script src="/../libs/javascript-astar/astar.js"></script>
 	<script src="tile_map.js"></script>
 </head>
 
@@ -14,23 +15,29 @@
 
 <script>
 	var myLand = new land({
-			size: [128, 128],	// [w,h]
-			roughness: 6,
+			size: [512, 512],	// [w,h]
+			roughness: 10,
+			smooth: 5,
 			levels: [
-					{ type: "water", values: [0, 0.35], walkable: 0 },	// [min, max]
+					{ type: "deepwater", values: [0, 0.3], walkable: 0 },	// [min, max]
+					{ type: "water", values: [0.3, 0.35], walkable: 0 },	// [min, max]
 					{ type: "ground", values: [0.35, 0.9], walkable: 1 },
-					{ type: "rock", values: [0.9, 0.95], walkable: 0.7 },
-					{ type: "snow", values: [0.95, 1], walkable: 0.5 }
+					{ type: "rock", values: [0.9, 0.97], walkable: 0.7 },
+					{ type: "snow", values: [0.97, 1], walkable: 0.5 }
 				],
-			water: {	// TODO
+			coast: {
 				level: 0.349,	// maximal water level
-				distance: 10,
+				distance: 50,	// use also for rivers ends
 				top: true,
 				bottom: true,
 				left: true,
 				right: true,
+				sand: true,	// add sand near water
 			},
 			rivers: {
+				from: [ 0.89, 0.96 ],	// start rivers from this height
+				to: [0, 0.35],	// end rivers at some other water
+				max: 50,
 			},
 			city: true
 		});

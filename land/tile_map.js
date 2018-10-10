@@ -18,9 +18,17 @@ var tileMap = function (obj) {
 				html: "-",
 				color: "green"
 			},
+			deepwater: {
+				html: "~",
+				color: "darkblue"
+			},
 			water: {
 				html: "~",
 				color: "blue"
+			},
+			river: {
+				html: "~",
+				color: "lightblue"
 			},
 			sand: {
 				html: "-",
@@ -60,7 +68,7 @@ var tileMap = function (obj) {
 				} else if (typeof this.tiles[type].types_color != 'undefined' && typeof this.tiles[type].types_color[sub_type] != 'undefined') {
 					color = this.tiles[type].types_color[sub_type];
 				}
-				out+='<div title="['+map[y][x].dbg+'] '+map[y][x].type+'.'+sub_type+' w'+walk[y][x]+'" style="background-color: '+color+'; display: inline-block; width:15px; height:15px; font-size: 10px;">&nbsp;</div>';
+				out+='<div title="['+map[y][x].dbg+'] '+map[y][x].type+'.'+sub_type+' w'+walk[y][x]+'" style="background-color: '+color+'; display: inline-block; width:5px; height:5px; font-size: 2px;">&nbsp;</div>';
 			}
 			out+="</div>";
 		}
