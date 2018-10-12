@@ -8,6 +8,11 @@ var land = function (c) {
 	this.moisture_map = false;
 	this.count_levels = 0;
 	this.ms = new Date().getTime();
+	this.use_canvas_smooth = false;	// TODO, as the 256 levels is not enough
+	this._smooth_canvas = false;
+	this._smooth_ctx = false;
+	this._terrain_size = false;
+	
 	
 	this._dbg_timer = function (txt) {
 		var tmp = new Date().getTime();
@@ -16,7 +21,17 @@ var land = function (c) {
 	}
 
 	this.init = function () {
+		this._terrain_size = this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1];	// TODO find where else it could be used (var l = map.length ??)
+		console.log("Terrain size", this._terrain_size);
 		this.count_levels = this.c.levels.length;
+		if (this.use_canvas_smooth) {
+			this._smooth_canvas = document.createElement('canvas');
+			this._smooth_ctx = this._smooth_canvas.getContext('2d');
+			this._smooth_ctx.canvas.width = this._terrain_size;
+			this._smooth_ctx.canvas.height = this._terrain_size;
+			document.getElementById("dbg2").append(this._smooth_canvas);
+		}
+
 		this.m = []; this.w = [];
 		this.rivers_map = [];
 		this.sand_map = [];
@@ -31,7 +46,7 @@ var land = function (c) {
 		}
 		this._dbg_timer("map1");
 
-		var tmp = generateTerrainMap(this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1], 1, this.c.roughness);
+		var tmp = generateTerrainMap(this._terrain_size, 1, this.c.roughness);
 		this._dbg_timer("terrain");
 		tmp = this._smooth(tmp,this.c.smooth);
 		this._dbg_timer("terrain smooth");
@@ -45,7 +60,7 @@ var land = function (c) {
 		
 		this.river(tmp);
 		this._dbg_timer("rivers");
-		this.moisture_map = this._binary_map(tmp, ['water','deepwater'], 1, this.c.size[0]/15);
+		this.moisture_map = this._binary_map(tmp, ['water','deepwater'], 1, parseInt(this.c.size[0]/15));
 		this._dbg_timer("moisture binary map");
 		this.moisture_map = this._smooth(this.moisture_map,this.c.smooth*2);
 		this._dbg_timer("moisture smooth");
@@ -102,10 +117,11 @@ var land = function (c) {
 			}
 		}
 		this._dbg_timer("moisture binary map init");
-		var d = 2;	// dramaticaly speed up
+		var d = Math.round(expand/8);	// dramaticaly speed up
+		if (d<=0) d=2;
 		for (var y=0;y<l;y=y+d) {
 			for (var x=0;x<l;x=x+d) {
-				if (newmap[y][x] == 1) this._depth_brush (nnewmap, [x,y], expand, 1, false);
+				if (y>=0 && y<l && x>=0 && x<l && newmap[y][x] == 1) this._depth_brush (nnewmap, [x,y], expand, 1, false);
 			}
 		}
 		newmap = null;
@@ -366,11 +382,37 @@ var land = function (c) {
 	
 	this._smooth = function (map, v) {
 		var newmap = [];
-		var l = map.length
-		for (var y=0;y<l;y++) {
-			newmap[y] = [];
-			for (var x=0;x<l;x++) {
-				newmap[y][x] = this._smooth_avg(map , [x,y], v);
+		if (this.use_canvas_smooth) {	// TODO
+			var img_data = this._smooth_ctx.createImageData(this._terrain_size+1, this._terrain_size+1);
+			i=0;
+			for (var y=0;y<=this._terrain_size;y++) {
+				newmap[y] = [];
+				for (var x=0;x<=this._terrain_size;x++) {
+					img_data.data[i]   = 255*map[y][x];	// less levels, yep (use other channels, as it is 256^4 )
+					img_data.data[i+1] = 0;
+					img_data.data[i+2] = 0;
+					img_data.data[i+3] = 255;
+					i+=4;
+				}
+			}
+			this._smooth_ctx.putImageData(img_data,0,0);
+			this._smooth_ctx._blurRect(0, 0, this._terrain_size+1, this._terrain_size+1, v);
+			i=0;
+			img_data = this._smooth_ctx.getImageData(0,0,this._terrain_size+1, this._terrain_size+1);
+			for (var y=0;y<=this._terrain_size;y++) {
+				for (var x=0;x<=this._terrain_size;x++) {
+					newmap[y][x]=img_data.data[i]/255;
+					i+=4;
+				}
+			}
+
+		} else {
+			var l = map.length;
+			for (var y=0;y<l;y++) {
+				newmap[y] = [];
+				for (var x=0;x<l;x++) {
+					newmap[y][x] = this._smooth_avg(map , [x,y], v);
+				}
 			}
 		}
 		return newmap;
@@ -385,12 +427,14 @@ var land = function (c) {
 				nx_min: pos[0]-d,
 				nx_max: pos[0]+d
 			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > this._terrain_size) b.ny_max = this._terrain_size;
+		if (b.nx_max > this._terrain_size) b.nx_max = this._terrain_size;
 		for (var y = b.ny_min; y <= b.ny_max; y++) {
 			for (var x = b.nx_min; x <= b.nx_max; x++) {
-				if (typeof map[y] != 'undefined' && typeof[map[y][x]] != 'undefined' && map[y][x]<=1 && map[y][x]>=0) {
-					s += map[y][x];
-					c++;
-				}
+				s += map[y][x];
+				c++;
 			}
 		}
 		return s/c;

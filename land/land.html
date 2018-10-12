@@ -9,6 +9,9 @@
 
 <body>
 
+<div id="dbg2" style="display: block;">
+</div>
+
 <div id="dbg" style="display: block;">
 </div>
 
@@ -39,7 +42,10 @@
 				to: [0, 0.35],	// end rivers at some other water
 				max: 20,
 			},
-			city: true
+			city: {
+				max: 10,
+				
+			}
 		});
 	
 	var map = new tileMap (document.getElementById("dbg"));
