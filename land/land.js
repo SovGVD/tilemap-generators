@@ -6,6 +6,8 @@ var land = function (c) {
 	this.rivers_map = false;
 	this.sand_map = false;
 	this.moisture_map = false;
+	this.city_map = false;
+	this.road_map = false;
 	this.count_levels = 0;
 	this.ms = new Date().getTime();
 	this.use_canvas_smooth = false;	// TODO, as the 256 levels is not enough
@@ -101,15 +103,158 @@ var land = function (c) {
 		return map;
 	}
 
+	this._city_position = function (poi, box) {
+		var pois = [];
+		var max = -1;
+		var v = 0;
+		for (var y = box.y0; y < box.y1; y++) {
+			for (var x = box.x0; x < box.x1; x++) {
+				if (this.isset(poi[y]) && this.isset(poi[y][x]) && poi[y][x] > 0) {
+					v = poi[y][x];
+					if (!this.isset(pois[v])) pois[v] = [];
+					pois[v].push({ pos: [x,y], value: v });
+					if (max < v) max = v;
+				}
+			}
+		}
+		if (max == -1) {
+			return false;
+		}
+		return pois[max][this.rnd(0,pois[max].length-1)];
+	}
 	
 	this.city = function () {
 		var poi = [];
-		var neighbours = false;
+		this.city_map = [];
+		this.road_map = {};
+		var n = false;
+		var delta = 3;
 		// set POI levels according to nearest neighbours
-		for (var y=1;y<this.c.size[1]-1;y++) {
-			for (var x=1;x<this.c.size[0]-1;x++) {
-				neighbours = this._neighbours([x,y],1);
+		for (var y=0;y<this.c.size[1];y++) {
+			poi[y] = [];
+			for (var x=0;x<this.c.size[0];x++) {
+				if (!this.isset(poi[y][x])) poi[y][x] = 0;
+				n = this._neighbours([x,y],delta);
+				if (this.isset(n.neighbours.river) && (n.point_type == 'ground' || n.point_type == 'rock' || n.point_type == 'desert')  && n.same_points_near/n.neighbours.river>=1) {
+					poi[y][x] += 3;
+				}
+				if (this.isset(n.neighbours.water) && n.point_type == 'ground' && n.same_points_near/n.neighbours.water>=1.5) {
+					poi[y][x]++;
+				}
+				if (this.isset(n.neighbours.water) && this.isset(n.neighbours.sand) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.water + n.neighbours.sand)>=1) {
+					poi[y][x] += 3;
+				}
+				if (this.isset(n.neighbours.river) && this.isset(n.neighbours.rock) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.river + n.neighbours.rock)>=1) {
+					poi[y][x] += 2;
+				}
+				if (this.isset(n.neighbours.river) && this.isset(n.neighbours.snow)) {
+					poi[y][x] += 2;
+				}
+				if (this.isset(n.neighbours.rock) && this.isset(n.neighbours.desert) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.rock + n.neighbours.desert)>=1) {
+					poi[y][x] += 2;
+				}
 			}
+		}
+		/*for (var y=0;y<this.c.size[1];y++) {
+			for (var x=0;x<this.c.size[0];x++) {
+				if (poi[y][x] > 5){
+					this.m[y][x].type = 'unknown';
+					this.m[y][x].dbg = poi[y][x];
+				} else if (poi[y][x] > 0) {
+					this.m[y][x].type = 'none';
+					this.m[y][x].dbg = poi[y][x];
+				}
+			}
+		}*/
+		var delta = {
+				x: Math.round(this.c.size[0]/Math.sqrt(this.c.city.max))+1,
+				y: Math.round(this.c.size[1]/Math.sqrt(this.c.city.max))+1
+			};
+		var pos = [0,0];
+		for (var y=0;y<this.c.size[1];y+=delta.y) {
+			for (var x=0;x<this.c.size[0];x+=delta.x) {
+				n = this._city_position(poi, {
+						x0: x,
+						y0: y,
+						x1: x+delta.x,
+						y1: y+delta.y
+					});
+				if (n !== false) {
+					this.city_map.push(n);
+					this.m[n.pos[1]][n.pos[0]].type='city';
+				}
+			}
+		}
+
+		var g = [];
+		var r = false;
+		for (var x=0;x<this.c.size[0];x++) {
+			g[x] = [];
+			for (var y=0;y<this.c.size[1];y++) {
+				if (this.w[y][x]>0) {
+					if (this.m[y][x].type == 'river') {
+						g[x][y] = 0;
+					} else {
+						g[x][y] = 1;
+					}
+				} else {
+					g[x][y] = 0;
+				}
+			}
+		}
+		g = this._smooth(g, 9);
+		for (var x=0;x<this.c.size[0];x++) {
+			for (var y=0;y<this.c.size[1];y++) {
+				if (this.w[y][x]>0) {
+					if (this.m[y][x].type == 'river') {
+						g[x][y] = Math.random()>0.8?1:0;
+					} else {
+						g[x][y] = g[x][y]*10+10;
+					}
+				} else {
+					g[x][y] = 0;
+				}
+			}
+		}
+		
+		var gr = new Graph(g);
+		for (var i = 0; i < this.city_map.length; i++) {
+			var best = { path: false, value: false };
+			for (var j = i+1; j < this.city_map.length; j++) {
+				//console.log("road from", i, "to", j);
+				// TODO don't make too much roads from one city
+				r = astar.search(gr, 
+					gr.grid[this.city_map[i].pos[0]][this.city_map[i].pos[1]], 
+					gr.grid[this.city_map[j].pos[0]][this.city_map[j].pos[1]]
+					);
+				console.log("road from", i, "to", j);
+				if (r.length > 0) {
+					this.road_map[(i+"-"+j)] = r;
+					if (best.value === false || best.value > r.length) best = { path: (i+"-"+j), value: r.length };
+				}
+			}
+			if (best.path !== false) {
+				console.log("Best way", best);
+				this._draw_road(this.road_map[best.path], g);
+				gr = new Graph(g);
+			} else {
+				// TODO no road to city... remove?
+			}
+		}
+		poi = null;
+	}
+	
+	this._draw_road = function (r, g) {
+		console.log("Draw", r);
+		for (var j = 0; j < r.length; j++) {
+			if (this.m[r[j].y][r[j].x].type == 'road') break;
+			if (this.m[r[j].y][r[j].x].type != 'river') {
+				this.m[r[j].y][r[j].x].type = 'road';
+			} else {
+				this.m[r[j].y][r[j].x].type = 'bridge';
+			}
+			g[r[j].x][r[j].y] = 100000;
+			this.w[r[j].y][r[j].x]=1;
 		}
 	}
 	
@@ -161,8 +306,10 @@ var land = function (c) {
 			for (var x=0;x<this.c.size[0];x++) {
 				if (this.rivers_map[y][x] > 0) {
 					this.m[y][x].type = 'river';
+					this.w[y][x] = this.rivers_map[y][x];
 				} else if (this.sand_map[y][x] > 0 && this.m[y][x].type == 'ground') {
 					this.m[y][x].type = 'sand';
+					this.w[y][x] = 0.7;
 				}
 			}
 		}
@@ -263,7 +410,6 @@ var land = function (c) {
 			}
 		}
 		for (var y=0;y<this.c.size[1];y++) {
-			//g[y] = [];
 			for (var x=0;x<this.c.size[0];x++) {
 				if (map[y][x] > this.c.rivers.from[1]) {
 					g[x][y]=0;	// wall
@@ -347,12 +493,12 @@ var land = function (c) {
 		var step = 1.5/(river.length-1);	// first value is the bigest brush "radius" ("square" radius, I don't want to use sin/cos)
 		for (var j = 0; j < river.length; j++) {
 			if (map[river[j].y][river[j].x]>water_value) {
-				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river');
+				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river', Math.round((1-j/river.length)*5+5)/10);
 			}
 		}
 	}
 	
-	this._depth_brush = function (map, pos, r, depth, type) {
+	this._depth_brush = function (map, pos, r, depth, type, walkable) {
 		var bpos = [0,0];
 		var b = {
 				ny_min: Math.round(pos[1]-r),
@@ -362,13 +508,11 @@ var land = function (c) {
 			};
 		for (var ny = b.ny_min; ny <= b.ny_max ; ny++) {
 			for (var nx = b.nx_min; nx <= b.nx_max; nx++) {
-				//bpos = [Math.round(nx), Math.round(ny)];
-				//bpos = [parseInt(nx), parseInt(ny)];
 				bpos = [nx, ny];
 				if (bpos[0]>=0 && bpos[1]>=0 && bpos[0]<this.c.size[0] && bpos[1]<this.c.size[1]) {map[bpos[1]][bpos[0]] = depth;}
 				if (type == 'river') {
 					// TODO set ID of the river?
-					try {this.rivers_map[bpos[1]][bpos[0]]=1;} catch (e) { /* nah */ }
+					try {this.rivers_map[bpos[1]][bpos[0]]=walkable;} catch (e) { /* nah */ }
 				}
 			}
 		}
@@ -424,11 +568,11 @@ var land = function (c) {
 	this._smooth = function (map, v) {
 		var newmap = [];
 		if (this.use_canvas_smooth) {	// TODO
-			var img_data = this._smooth_ctx.createImageData(this._terrain_size+1, this._terrain_size+1);
+			/*var img_data = this._smooth_ctx.createImageData(this._terrain_size+1, this._terrain_size+1);
 			i=0;
-			for (var y=0;y<=this._terrain_size;y++) {
+			for (var y=0;y<=map.length;y++) {
 				newmap[y] = [];
-				for (var x=0;x<=this._terrain_size;x++) {
+				for (var x=0;x<=map[y].length;x++) {
 					img_data.data[i]   = 255*map[y][x];	// less levels, yep (use other channels, as it is 256^4 )
 					img_data.data[i+1] = 0;
 					img_data.data[i+2] = 0;
@@ -445,13 +589,12 @@ var land = function (c) {
 					newmap[y][x]=img_data.data[i]/255;
 					i+=4;
 				}
-			}
+			}*/
 
 		} else {
-			var l = map.length;
-			for (var y=0;y<l;y++) {
+			for (var y=0;y<map.length;y++) {
 				newmap[y] = [];
-				for (var x=0;x<l;x++) {
+				for (var x=0;x<map[y].length;x++) {
 					newmap[y][x] = this._smooth_avg(map , [x,y], v);
 				}
 			}
@@ -470,8 +613,8 @@ var land = function (c) {
 			};
 		if (b.ny_min < 0) b.ny_min = 0;
 		if (b.nx_min < 0) b.nx_min = 0;
-		if (b.ny_max > this._terrain_size) b.ny_max = this._terrain_size;
-		if (b.nx_max > this._terrain_size) b.nx_max = this._terrain_size;
+		if (b.ny_max > map.length-1) b.ny_max = map.length-1;
+		if (b.nx_max > map[0].length-1) b.nx_max = map[0].length-1;
 		for (var y = b.ny_min; y <= b.ny_max; y++) {
 			for (var x = b.nx_min; x <= b.nx_max; x++) {
 				s += map[y][x];
@@ -488,6 +631,9 @@ var land = function (c) {
 	}
 	this.rnd = function (min, max) {
 		return parseInt((Math.random()*(max-min+1)+min));
+	}
+	this.isset = function (v) {
+		return (typeof v != 'undefined');
 	}
 	
 	this.shuffle = function (arr) {

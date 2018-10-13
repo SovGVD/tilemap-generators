@@ -19,8 +19,8 @@
 <script>
 	var myLand = new land({
 			size: [512, 512],	// [w,h]
-			roughness: 8,
-			smooth: 2,
+			roughness: 10,
+			smooth: 4,
 			levels: [
 					{ type: "deepwater", values: [0, 0.3], walkable: 0 },	// [min, max]
 					{ type: "water", values: [0.3, 0.35], walkable: 0 },	// [min, max]
@@ -40,10 +40,10 @@
 			rivers: {
 				from: [ 0.9, 0.97 ],	// start rivers from this height (around rocks)
 				to: [0, 0.35],	// end rivers at some other water
-				max: 20,
+				max: 10,
 			},
 			city: {
-				max: 10,
+				max: 20,	// this is actualy not the max value, but something around
 			}
 		});
 	

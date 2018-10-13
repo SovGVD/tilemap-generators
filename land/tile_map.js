@@ -12,7 +12,15 @@ var tileMap = function (obj) {
 	this.tiles = {
 			road: {
 				html: "+",
-				color: "gray"
+				color: "black"
+			},
+			bridge: {
+				html: "+",
+				color: "darkgray"
+			},
+			city: {
+				html: "x",
+				color: "red"
 			},
 			ground: {
 				html: "-",
