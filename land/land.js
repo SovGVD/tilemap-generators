@@ -81,6 +81,10 @@ var land = function (c) {
 		this._dbg_timer("expand");
 		this.clean();
 		this._dbg_timer("clean");
+		
+		// City
+		this.city();
+		this._dbg_timer("city");
 		tmp = null;
 	}
 	
@@ -95,6 +99,18 @@ var land = function (c) {
 			}
 		}
 		return map;
+	}
+
+	
+	this.city = function () {
+		var poi = [];
+		var neighbours = false;
+		// set POI levels according to nearest neighbours
+		for (var y=1;y<this.c.size[1]-1;y++) {
+			for (var x=1;x<this.c.size[0]-1;x++) {
+				neighbours = this._neighbours([x,y],1);
+			}
+		}
 	}
 	
 	this._binary_map = function (map, binary_types, fill_border, expand) {
@@ -151,13 +167,45 @@ var land = function (c) {
 			}
 		}
 	}
+	
+	this._neighbours = function (pos, d) {
+		var this_point_type = this.m[pos[1]][pos[0]].type;
+		var this_point_neighbours = {};
+		var same_points_near = 0;
+		var max_type = { type: false, value: 0 };
+		var t = false;
+		var b = {
+				ny_min: pos[1]-d,
+				ny_max: pos[1]+d,
+				nx_min: pos[0]-d,
+				nx_max: pos[0]+d
+			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > this.c.size[1]-1) b.ny_max = this.c.size[1]-1;
+		if (b.nx_max > this.c.size[0]-1) b.nx_max = this.c.size[0]-1;
+
+		for (var y = b.ny_min; y <= b.ny_max; y++) {
+			for (var x = b.nx_min; x <= b.nx_max; x++) {
+				if (this.m[y][x].type == this_point_type) {
+					same_points_near++;
+				} else {
+					t = this.m[y][x].type;
+					if (typeof this_point_neighbours[t] == 'undefined') this_point_neighbours[t]=0;
+					this_point_neighbours[t]++;
+					if (this_point_neighbours[t] > max_type.value) max_type = { type: t, value: this_point_neighbours[t] };
+				}
+			}
+		}
+		return { point_type: this_point_type, same_points_near: same_points_near, neighbours: this_point_neighbours, max: max_type };
+	}
 
 	this.clean = function () {
 		var tmp = [];
 		var this_point_type = false;
 		var same_points_near = 0;
-		var this_point_neighbours = { };
-		// copy map
+		var neighbours = false;
+		// copy map types
 		for (var y=0;y<this.c.size[1];y++) {
 			tmp[y]=[];
 			for (var x=0;x<this.c.size[0];x++) {
@@ -165,30 +213,11 @@ var land = function (c) {
 			}
 		}
 
-		for (var y=1;y<this.c.size[1]-1;y++) {
-			for (var x=1;x<this.c.size[0]-1;x++) {
-				this_point_type = this.m[y][x].type;
-				this_point_neighbours = {};
-				same_points_near = 0;
-				for (var ny = y-1; ny <= y+1; ny++) {
-					for (var nx = x-1; nx <= x+1; nx++) {
-						if (this.m[ny][nx].type == this_point_type) {
-							same_points_near++;
-						} else {
-							if (typeof this_point_neighbours[this.m[ny][nx].type] == 'undefined') this_point_neighbours[this.m[ny][nx].type]=0;
-							this_point_neighbours[this.m[ny][nx].type]++;
-						}
-					}
-				}
-				if (same_points_near === 1) {	// only this point
-					same_points_near = 0;
-					for (var point_type in this_point_neighbours) {
-						if (typeof this_point_neighbours[point_type] !='undefined' && this_point_neighbours[point_type]>same_points_near) {
-							same_points_near = this_point_neighbours[point_type];
-							this_point_type = point_type;
-						}
-					}
-					tmp[y][x] = this_point_type;
+		for (var y=0;y<this.c.size[1];y++) {
+			for (var x=0;x<this.c.size[0];x++) {
+				neighbours = this._neighbours([x,y],1);
+				if (neighbours.same_points_near === 1) {	// only this point
+					tmp[y][x] = neighbours.max.type;
 				}
 			}
 		}
@@ -227,10 +256,22 @@ var land = function (c) {
 		var r = [ false, false ];
 		// prepare graph for [javascript-astar](https://github.com/bgrins/javascript-astar)
 		var g = [];
+		for (var x=0;x<this.c.size[0];x++) {
+			g[x] = [];
+			for (var y=0;y<this.c.size[1];y++) {
+				g[x][y] = 0;
+			}
+		}
 		for (var y=0;y<this.c.size[1];y++) {
-			g[y] = [];
+			//g[y] = [];
 			for (var x=0;x<this.c.size[0];x++) {
-				g[y][x] = (map[y][x]*this.rnd(1,10))+1;	// value should be bigger that 1, or will be set as "wall"
+				if (map[y][x] > this.c.rivers.from[1]) {
+					g[x][y]=0;	// wall
+				} else if (map[y][x]>=this.c.rivers.from[0] && map[y][x]<=this.c.rivers.from[1]) {
+					g[x][y] = (map[y][x]*100+this.rnd(300,500))+1;
+				} else {
+					g[x][y] = (map[y][x]*100+this.rnd(0,100))+1;	// value should be bigger that 1, or will be set as "wall"
+				}
 				if (map[y][x]>=this.c.rivers.from[0] && map[y][x]<=this.c.rivers.from[1]) {
 					starts.push([x,y]);
 				}
@@ -239,12 +280,12 @@ var land = function (c) {
 					// Yep, this will overlap left/right and top/bottom
 					if (x>=0 && x<this.c.coast.distance) {
 						where = 'left';
+					} else if (y>=this.c.size[1]-this.c.coast.distance && y<this.c.size[1]) {
+						where = 'bottom';
 					} else if (x>=this.c.size[0]-this.c.coast.distance && x<this.c.size[0]) {
-						where = 'right'
+						where = 'right';
 					} else if (y>=0 && y<this.c.coast.distance) {
 						where = 'top';
-					} else if (y>=this.c.size[1]-this.c.coast.distance && y<this.c.size[1]) {
-						where = 'bottom'
 					}
 					if (where !== false)  {
 						ends[where].push([x,y]);
