@@ -42,7 +42,7 @@ var land = function (c) {
 			this.rivers_map[y] = [];
 			this.sand_map[y] = [];
 			for (var x=0;x<this.c.size[0];x++) {
-				this.rivers_map[y][x] = 0;
+				this.rivers_map[y][x] = { w:0, rw:0 };
 				this.sand_map[y][x] = 0;
 			}
 		}
@@ -103,12 +103,13 @@ var land = function (c) {
 		return map;
 	}
 
-	this._city_position = function (poi, box) {
+	this._city_position = function (poi, box, distance_limit) {
 		var pois = [];
 		var max = -1;
 		var v = 0;
 		for (var y = box.y0; y < box.y1; y++) {
 			for (var x = box.x0; x < box.x1; x++) {
+				// TODO check distance to nearest city
 				if (this.isset(poi[y]) && this.isset(poi[y][x]) && poi[y][x] > 0) {
 					v = poi[y][x];
 					if (!this.isset(pois[v])) pois[v] = [];
@@ -120,7 +121,21 @@ var land = function (c) {
 		if (max == -1) {
 			return false;
 		}
-		return pois[max][this.rnd(0,pois[max].length-1)];
+		var i = false;
+		var fitted = false;
+		var watchdog = 1000;
+		while (!fitted && watchdog>0) {
+			var j = this.rnd(0, pois[max].length-1);
+			for (var i = 0; i < this.city_map.length; i++) {
+				if (this.distance(this.city_map[i].pos, pois[max][j].pos) < distance_limit) {
+					fitted = true;
+					watchdog = 0;
+					break;
+				}
+			}
+			watchdog--;
+		}
+		return pois[max][j];
 	}
 	
 	this.city = function () {
@@ -155,33 +170,25 @@ var land = function (c) {
 				}
 			}
 		}
-		/*for (var y=0;y<this.c.size[1];y++) {
-			for (var x=0;x<this.c.size[0];x++) {
-				if (poi[y][x] > 5){
-					this.m[y][x].type = 'unknown';
-					this.m[y][x].dbg = poi[y][x];
-				} else if (poi[y][x] > 0) {
-					this.m[y][x].type = 'none';
-					this.m[y][x].dbg = poi[y][x];
-				}
-			}
-		}*/
+
 		var delta = {
 				x: Math.round(this.c.size[0]/Math.sqrt(this.c.city.max))+1,
 				y: Math.round(this.c.size[1]/Math.sqrt(this.c.city.max))+1
 			};
 		var pos = [0,0];
+		// TODO sort city by n.value
 		for (var y=0;y<this.c.size[1];y+=delta.y) {
 			for (var x=0;x<this.c.size[0];x+=delta.x) {
-				n = this._city_position(poi, {
+				// get best position for city
+				n = this._city_position(poi, 
+					{
 						x0: x,
 						y0: y,
 						x1: x+delta.x,
 						y1: y+delta.y
-					});
+					}, parseInt((delta.x>delta.y?delta.y:delta.x)/2));
 				if (n !== false) {
 					this.city_map.push(n);
-					this.m[n.pos[1]][n.pos[0]].type='city';
 				}
 			}
 		}
@@ -207,9 +214,9 @@ var land = function (c) {
 			for (var y=0;y<this.c.size[1];y++) {
 				if (this.w[y][x]>0) {
 					if (this.m[y][x].type == 'river') {
-						g[x][y] = Math.random()>0.8?1:0;
+						g[x][y] = this.rivers_map[y][x].rw*10+100;	// use more roads, than ground
 					} else {
-						g[x][y] = g[x][y]*10+10;
+						g[x][y] = g[x][y]*5+10;
 					}
 				} else {
 					g[x][y] = 0;
@@ -218,34 +225,53 @@ var land = function (c) {
 		}
 		
 		var gr = new Graph(g);
-		for (var i = 0; i < this.city_map.length; i++) {
-			var best = { path: false, value: false };
+		var limit = 3;
+		for (var i = 0; i < this.city_map.length-1; i++) {
+			var best = [];
+			var nearest = false;
+			var distance = false;
+			limit = this.city_map[i].value;	// more city value, more road from this city
 			for (var j = i+1; j < this.city_map.length; j++) {
-				//console.log("road from", i, "to", j);
-				// TODO don't make too much roads from one city
-				r = astar.search(gr, 
-					gr.grid[this.city_map[i].pos[0]][this.city_map[i].pos[1]], 
-					gr.grid[this.city_map[j].pos[0]][this.city_map[j].pos[1]]
-					);
-				console.log("road from", i, "to", j);
-				if (r.length > 0) {
-					this.road_map[(i+"-"+j)] = r;
-					if (best.value === false || best.value > r.length) best = { path: (i+"-"+j), value: r.length };
+				// calculate route only if there is no road between this points
+				if (typeof this.road_map[(i+"-"+j)] == 'undefined' && typeof this.road_map[(i+"-"+j)] == 'undefined') {
+					distance = this.distance(this.city_map[i].pos, this.city_map[i].pos);
+					if ((nearest == false || nearest >= distance)) {
+						nearest = distance;
+						best.unshift({ from: i, to: j });	// add nearest and new way to the begining of the list
+					}
+					if (best.length > limit) {
+						best.pop();	// remove last longest road
+					}
 				}
 			}
-			if (best.path !== false) {
-				console.log("Best way", best);
-				this._draw_road(this.road_map[best.path], g);
-				gr = new Graph(g);
+			if (best.length > 0) {
+				console.log("draw", best);
+				for (var k = 0; k < best.length; k++) {
+					r = astar.search(gr, 
+						gr.grid[this.city_map[best[k].from].pos[0]][this.city_map[best[k].from].pos[1]], 
+						gr.grid[this.city_map[best[k].to].pos[0]][this.city_map[best[k].to].pos[1]]
+						);
+					if (r.length > 0) {
+						this.road_map[(i+"-"+j)] = r;
+						this._draw_road(r, g);
+						gr = new Graph(g);
+					}
+				}
 			} else {
-				// TODO no road to city... remove?
+				// weird... no distance to city
 			}
 		}
 		poi = null;
+		// restore city points
+		for (var i = 0; i < this.city_map.length; i++) {
+			n = this.city_map[i];
+			this.m[n.pos[1]][n.pos[0]].type='city';
+			this.m[n.pos[1]][n.pos[0]].dbg=i;
+		}
+
 	}
 	
 	this._draw_road = function (r, g) {
-		console.log("Draw", r);
 		for (var j = 0; j < r.length; j++) {
 			if (this.m[r[j].y][r[j].x].type == 'road') break;
 			if (this.m[r[j].y][r[j].x].type != 'river') {
@@ -253,7 +279,7 @@ var land = function (c) {
 			} else {
 				this.m[r[j].y][r[j].x].type = 'bridge';
 			}
-			g[r[j].x][r[j].y] = 100000;
+			g[r[j].x][r[j].y] = 1;
 			this.w[r[j].y][r[j].x]=1;
 		}
 	}
@@ -304,9 +330,9 @@ var land = function (c) {
 	this.restore = function () {
 		for (var y=0;y<this.c.size[1];y++) {
 			for (var x=0;x<this.c.size[0];x++) {
-				if (this.rivers_map[y][x] > 0) {
+				if (this.rivers_map[y][x].w > 0) {
 					this.m[y][x].type = 'river';
-					this.w[y][x] = this.rivers_map[y][x];
+					this.w[y][x] = this.rivers_map[y][x].w;
 				} else if (this.sand_map[y][x] > 0 && this.m[y][x].type == 'ground') {
 					this.m[y][x].type = 'sand';
 					this.w[y][x] = 0.7;
@@ -491,14 +517,25 @@ var land = function (c) {
 	this._river_draw = function (map, river) {
 		var water_value = 0.34;
 		var step = 1.5/(river.length-1);	// first value is the bigest brush "radius" ("square" radius, I don't want to use sin/cos)
+		var walkable = 10;	// every 10 tiles, river should be "walkable" for roads
+		var w_id = 0;
+		var rw = 0;	// road could be there
 		for (var j = 0; j < river.length; j++) {
 			if (map[river[j].y][river[j].x]>water_value) {
-				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river', Math.round((1-j/river.length)*5+5)/10);
+				if (w_id>=walkable) {
+					rw = 1;
+					w_id = 0;
+				} else {
+					rw = 0;
+				}
+				//this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river', { w: Math.round((1-j/river.length)*5+5)/10, rw:0 });
+				this._depth_brush (map, [river[j].x, river[j].y], 0, water_value, 'river', { w: Math.round((1-j/river.length)*5+5)/10, rw: rw });
+				w_id++;
 			}
 		}
 	}
 	
-	this._depth_brush = function (map, pos, r, depth, type, walkable) {
+	this._depth_brush = function (map, pos, r, depth, type, settings) {
 		var bpos = [0,0];
 		var b = {
 				ny_min: Math.round(pos[1]-r),
@@ -512,7 +549,8 @@ var land = function (c) {
 				if (bpos[0]>=0 && bpos[1]>=0 && bpos[0]<this.c.size[0] && bpos[1]<this.c.size[1]) {map[bpos[1]][bpos[0]] = depth;}
 				if (type == 'river') {
 					// TODO set ID of the river?
-					try {this.rivers_map[bpos[1]][bpos[0]]=walkable;} catch (e) { /* nah */ }
+					// TODO set one or two dots for roads
+					try {this.rivers_map[bpos[1]][bpos[0]]=settings;} catch (e) { /* nah */ }
 				}
 			}
 		}
