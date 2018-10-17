@@ -121,13 +121,16 @@ var land = function (c) {
 		if (max == -1) {
 			return false;
 		}
-		var i = false;
+
+		var j = 0;
 		var fitted = false;
 		var watchdog = 1000;
 		while (!fitted && watchdog>0) {
-			var j = this.rnd(0, pois[max].length-1);
+			// TODO check position of the city
+			j = this.rnd(0, pois[max].length-1);
 			for (var i = 0; i < this.city_map.length; i++) {
 				if (this.distance(this.city_map[i].pos, pois[max][j].pos) < distance_limit) {
+					// TODO this is actualy stop everything as soon as one of the city is far away. So it is bug!
 					fitted = true;
 					watchdog = 0;
 					break;
@@ -188,6 +191,7 @@ var land = function (c) {
 						y1: y+delta.y
 					}, parseInt((delta.x>delta.y?delta.y:delta.x)/2));
 				if (n !== false) {
+					n.ground = this._neighbours(n.pos, n.value);
 					this.city_map.push(n);
 				}
 			}
@@ -245,7 +249,7 @@ var land = function (c) {
 				}
 			}
 			if (best.length > 0) {
-				console.log("draw", best);
+				console.log("draw", i, this.city_map.length-2 , best);
 				for (var k = 0; k < best.length; k++) {
 					r = astar.search(gr, 
 						gr.grid[this.city_map[best[k].from].pos[0]][this.city_map[best[k].from].pos[1]], 
@@ -265,10 +269,31 @@ var land = function (c) {
 		// restore city points
 		for (var i = 0; i < this.city_map.length; i++) {
 			n = this.city_map[i];
-			this.m[n.pos[1]][n.pos[0]].type='city';
-			this.m[n.pos[1]][n.pos[0]].dbg=i;
+			this._draw_city(n.pos, n.value, i);
 		}
+	}
+	
+	this._draw_city = function (pos, d, id) {
+		var b = {
+				ny_min: pos[1]-d,
+				ny_max: pos[1]+d,
+				nx_min: pos[0]-d,
+				nx_max: pos[0]+d
+			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > this.c.size[1]-1) b.ny_max = this.c.size[1]-1;
+		if (b.nx_max > this.c.size[0]-1) b.nx_max = this.c.size[0]-1;
 
+		for (var y = b.ny_min; y <= b.ny_max; y++) {
+			for (var x = b.nx_min; x <= b.nx_max; x++) {
+				if (this.m[y][x].type == 'water' || this.m[y][x].type == 'deepwater' || this.m[y][x].type == 'river') {
+				} else if (this.distance(pos, [x,y]) <= d+0.5) {
+					this.m[y][x].type='city';
+					this.m[y][x].dbg=id;
+				}
+			}
+		}
 	}
 	
 	this._draw_road = function (r, g) {
@@ -665,7 +690,7 @@ var land = function (c) {
 	// help functions
 
 	this.distance = function (pos0, pos1) {
-		return Math.round(Math.sqrt(Math.pow(pos0[0]-pos1[0],2)+Math.pow(pos0[1]+pos1[1],2)));
+		return Math.round(Math.sqrt(Math.pow(pos0[0]-pos1[0],2)+Math.pow(pos0[1]-pos1[1],2)));
 	}
 	this.rnd = function (min, max) {
 		return parseInt((Math.random()*(max-min+1)+min));
