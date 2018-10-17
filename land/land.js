@@ -6,8 +6,15 @@ var land = function (c) {
 	this.rivers_map = false;
 	this.sand_map = false;
 	this.moisture_map = false;
+	this.city_map = false;
+	this.road_map = false;
 	this.count_levels = 0;
 	this.ms = new Date().getTime();
+	this.use_canvas_smooth = false;	// TODO, as the 256 levels is not enough
+	this._smooth_canvas = false;
+	this._smooth_ctx = false;
+	this._terrain_size = false;
+	
 	
 	this._dbg_timer = function (txt) {
 		var tmp = new Date().getTime();
@@ -16,7 +23,17 @@ var land = function (c) {
 	}
 
 	this.init = function () {
+		this._terrain_size = this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1];	// TODO find where else it could be used (var l = map.length ??)
+		console.log("Terrain size", this._terrain_size);
 		this.count_levels = this.c.levels.length;
+		if (this.use_canvas_smooth) {
+			this._smooth_canvas = document.createElement('canvas');
+			this._smooth_ctx = this._smooth_canvas.getContext('2d');
+			this._smooth_ctx.canvas.width = this._terrain_size;
+			this._smooth_ctx.canvas.height = this._terrain_size;
+			document.getElementById("dbg2").append(this._smooth_canvas);
+		}
+
 		this.m = []; this.w = [];
 		this.rivers_map = [];
 		this.sand_map = [];
@@ -25,13 +42,13 @@ var land = function (c) {
 			this.rivers_map[y] = [];
 			this.sand_map[y] = [];
 			for (var x=0;x<this.c.size[0];x++) {
-				this.rivers_map[y][x] = 0;
+				this.rivers_map[y][x] = { w:0, rw:0 };
 				this.sand_map[y][x] = 0;
 			}
 		}
 		this._dbg_timer("map1");
 
-		var tmp = generateTerrainMap(this.c.size[0]>this.c.size[1]?this.c.size[0]:this.c.size[1], 1, this.c.roughness);
+		var tmp = generateTerrainMap(this._terrain_size, 1, this.c.roughness);
 		this._dbg_timer("terrain");
 		tmp = this._smooth(tmp,this.c.smooth);
 		this._dbg_timer("terrain smooth");
@@ -45,7 +62,7 @@ var land = function (c) {
 		
 		this.river(tmp);
 		this._dbg_timer("rivers");
-		this.moisture_map = this._binary_map(tmp, ['water','deepwater'], 1, this.c.size[0]/15);
+		this.moisture_map = this._binary_map(tmp, ['water','deepwater'], 1, parseInt(this.c.size[0]/15));
 		this._dbg_timer("moisture binary map");
 		this.moisture_map = this._smooth(this.moisture_map,this.c.smooth*2);
 		this._dbg_timer("moisture smooth");
@@ -66,6 +83,10 @@ var land = function (c) {
 		this._dbg_timer("expand");
 		this.clean();
 		this._dbg_timer("clean");
+		
+		// City
+		this.city();
+		this._dbg_timer("city");
 		tmp = null;
 	}
 	
@@ -80,6 +101,212 @@ var land = function (c) {
 			}
 		}
 		return map;
+	}
+
+	this._city_position = function (poi, box, distance_limit) {
+		var pois = [];
+		var max = -1;
+		var v = 0;
+		for (var y = box.y0; y < box.y1; y++) {
+			for (var x = box.x0; x < box.x1; x++) {
+				// TODO check distance to nearest city
+				if (this.isset(poi[y]) && this.isset(poi[y][x]) && poi[y][x] > 0) {
+					v = poi[y][x];
+					if (!this.isset(pois[v])) pois[v] = [];
+					pois[v].push({ pos: [x,y], value: v });
+					if (max < v) max = v;
+				}
+			}
+		}
+		if (max == -1) {
+			return false;
+		}
+
+		var j = 0;
+		var fitted = false;
+		var watchdog = 1000;
+		while (!fitted && watchdog>0) {
+			// TODO check position of the city
+			j = this.rnd(0, pois[max].length-1);
+			for (var i = 0; i < this.city_map.length; i++) {
+				if (this.distance(this.city_map[i].pos, pois[max][j].pos) < distance_limit) {
+					// TODO this is actualy stop everything as soon as one of the city is far away. So it is bug!
+					fitted = true;
+					watchdog = 0;
+					break;
+				}
+			}
+			watchdog--;
+		}
+		return pois[max][j];
+	}
+	
+	this.city = function () {
+		var poi = [];
+		this.city_map = [];
+		this.road_map = {};
+		var n = false;
+		var delta = 3;
+		// set POI levels according to nearest neighbours
+		for (var y=0;y<this.c.size[1];y++) {
+			poi[y] = [];
+			for (var x=0;x<this.c.size[0];x++) {
+				if (!this.isset(poi[y][x])) poi[y][x] = 0;
+				n = this._neighbours([x,y],delta);
+				if (this.isset(n.neighbours.river) && (n.point_type == 'ground' || n.point_type == 'rock' || n.point_type == 'desert')  && n.same_points_near/n.neighbours.river>=1) {
+					poi[y][x] += 3;
+				}
+				if (this.isset(n.neighbours.water) && n.point_type == 'ground' && n.same_points_near/n.neighbours.water>=1.5) {
+					poi[y][x]++;
+				}
+				if (this.isset(n.neighbours.water) && this.isset(n.neighbours.sand) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.water + n.neighbours.sand)>=1) {
+					poi[y][x] += 3;
+				}
+				if (this.isset(n.neighbours.river) && this.isset(n.neighbours.rock) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.river + n.neighbours.rock)>=1) {
+					poi[y][x] += 2;
+				}
+				if (this.isset(n.neighbours.river) && this.isset(n.neighbours.snow)) {
+					poi[y][x] += 2;
+				}
+				if (this.isset(n.neighbours.rock) && this.isset(n.neighbours.desert) && n.point_type == 'ground' && n.same_points_near/(n.neighbours.rock + n.neighbours.desert)>=1) {
+					poi[y][x] += 2;
+				}
+			}
+		}
+
+		var delta = {
+				x: Math.round(this.c.size[0]/Math.sqrt(this.c.city.max))+1,
+				y: Math.round(this.c.size[1]/Math.sqrt(this.c.city.max))+1
+			};
+		var pos = [0,0];
+		// TODO sort city by n.value
+		for (var y=0;y<this.c.size[1];y+=delta.y) {
+			for (var x=0;x<this.c.size[0];x+=delta.x) {
+				// get best position for city
+				n = this._city_position(poi, 
+					{
+						x0: x,
+						y0: y,
+						x1: x+delta.x,
+						y1: y+delta.y
+					}, parseInt((delta.x>delta.y?delta.y:delta.x)/2));
+				if (n !== false) {
+					n.ground = this._neighbours(n.pos, n.value);
+					this.city_map.push(n);
+				}
+			}
+		}
+
+		var g = [];
+		var r = false;
+		for (var x=0;x<this.c.size[0];x++) {
+			g[x] = [];
+			for (var y=0;y<this.c.size[1];y++) {
+				if (this.w[y][x]>0) {
+					if (this.m[y][x].type == 'river') {
+						g[x][y] = 0;
+					} else {
+						g[x][y] = 1;
+					}
+				} else {
+					g[x][y] = 0;
+				}
+			}
+		}
+		g = this._smooth(g, 9);
+		for (var x=0;x<this.c.size[0];x++) {
+			for (var y=0;y<this.c.size[1];y++) {
+				if (this.w[y][x]>0) {
+					if (this.m[y][x].type == 'river') {
+						g[x][y] = this.rivers_map[y][x].rw*10+100;	// use more roads, than ground
+					} else {
+						g[x][y] = g[x][y]*5+10;
+					}
+				} else {
+					g[x][y] = 0;
+				}
+			}
+		}
+		
+		var gr = new Graph(g);
+		var limit = 3;
+		for (var i = 0; i < this.city_map.length-1; i++) {
+			var best = [];
+			var nearest = false;
+			var distance = false;
+			limit = this.city_map[i].value;	// more city value, more road from this city
+			for (var j = i+1; j < this.city_map.length; j++) {
+				// calculate route only if there is no road between this points
+				if (typeof this.road_map[(i+"-"+j)] == 'undefined' && typeof this.road_map[(i+"-"+j)] == 'undefined') {
+					distance = this.distance(this.city_map[i].pos, this.city_map[i].pos);
+					if ((nearest == false || nearest >= distance)) {
+						nearest = distance;
+						best.unshift({ from: i, to: j });	// add nearest and new way to the begining of the list
+					}
+					if (best.length > limit) {
+						best.pop();	// remove last longest road
+					}
+				}
+			}
+			if (best.length > 0) {
+				console.log("draw", i, this.city_map.length-2 , best);
+				for (var k = 0; k < best.length; k++) {
+					r = astar.search(gr, 
+						gr.grid[this.city_map[best[k].from].pos[0]][this.city_map[best[k].from].pos[1]], 
+						gr.grid[this.city_map[best[k].to].pos[0]][this.city_map[best[k].to].pos[1]]
+						);
+					if (r.length > 0) {
+						this.road_map[(i+"-"+j)] = r;
+						this._draw_road(r, g);
+						gr = new Graph(g);
+					}
+				}
+			} else {
+				// weird... no distance to city
+			}
+		}
+		poi = null;
+		// restore city points
+		for (var i = 0; i < this.city_map.length; i++) {
+			n = this.city_map[i];
+			this._draw_city(n.pos, n.value, i);
+		}
+	}
+	
+	this._draw_city = function (pos, d, id) {
+		var b = {
+				ny_min: pos[1]-d,
+				ny_max: pos[1]+d,
+				nx_min: pos[0]-d,
+				nx_max: pos[0]+d
+			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > this.c.size[1]-1) b.ny_max = this.c.size[1]-1;
+		if (b.nx_max > this.c.size[0]-1) b.nx_max = this.c.size[0]-1;
+
+		for (var y = b.ny_min; y <= b.ny_max; y++) {
+			for (var x = b.nx_min; x <= b.nx_max; x++) {
+				if (this.m[y][x].type == 'water' || this.m[y][x].type == 'deepwater' || this.m[y][x].type == 'river') {
+				} else if (this.distance(pos, [x,y]) <= d+0.5) {
+					this.m[y][x].type='city';
+					this.m[y][x].dbg=id;
+				}
+			}
+		}
+	}
+	
+	this._draw_road = function (r, g) {
+		for (var j = 0; j < r.length; j++) {
+			if (this.m[r[j].y][r[j].x].type == 'road') break;
+			if (this.m[r[j].y][r[j].x].type != 'river') {
+				this.m[r[j].y][r[j].x].type = 'road';
+			} else {
+				this.m[r[j].y][r[j].x].type = 'bridge';
+			}
+			g[r[j].x][r[j].y] = 1;
+			this.w[r[j].y][r[j].x]=1;
+		}
 	}
 	
 	this._binary_map = function (map, binary_types, fill_border, expand) {
@@ -102,10 +329,11 @@ var land = function (c) {
 			}
 		}
 		this._dbg_timer("moisture binary map init");
-		var d = 2;	// dramaticaly speed up
+		var d = Math.round(expand/8);	// dramaticaly speed up
+		if (d<=0) d=2;
 		for (var y=0;y<l;y=y+d) {
 			for (var x=0;x<l;x=x+d) {
-				if (newmap[y][x] == 1) this._depth_brush (nnewmap, [x,y], expand, 1, false);
+				if (y>=0 && y<l && x>=0 && x<l && newmap[y][x] == 1) this._depth_brush (nnewmap, [x,y], expand, 1, false);
 			}
 		}
 		newmap = null;
@@ -127,21 +355,55 @@ var land = function (c) {
 	this.restore = function () {
 		for (var y=0;y<this.c.size[1];y++) {
 			for (var x=0;x<this.c.size[0];x++) {
-				if (this.rivers_map[y][x] > 0) {
+				if (this.rivers_map[y][x].w > 0) {
 					this.m[y][x].type = 'river';
+					this.w[y][x] = this.rivers_map[y][x].w;
 				} else if (this.sand_map[y][x] > 0 && this.m[y][x].type == 'ground') {
 					this.m[y][x].type = 'sand';
+					this.w[y][x] = 0.7;
 				}
 			}
 		}
+	}
+	
+	this._neighbours = function (pos, d) {
+		var this_point_type = this.m[pos[1]][pos[0]].type;
+		var this_point_neighbours = {};
+		var same_points_near = 0;
+		var max_type = { type: false, value: 0 };
+		var t = false;
+		var b = {
+				ny_min: pos[1]-d,
+				ny_max: pos[1]+d,
+				nx_min: pos[0]-d,
+				nx_max: pos[0]+d
+			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > this.c.size[1]-1) b.ny_max = this.c.size[1]-1;
+		if (b.nx_max > this.c.size[0]-1) b.nx_max = this.c.size[0]-1;
+
+		for (var y = b.ny_min; y <= b.ny_max; y++) {
+			for (var x = b.nx_min; x <= b.nx_max; x++) {
+				if (this.m[y][x].type == this_point_type) {
+					same_points_near++;
+				} else {
+					t = this.m[y][x].type;
+					if (typeof this_point_neighbours[t] == 'undefined') this_point_neighbours[t]=0;
+					this_point_neighbours[t]++;
+					if (this_point_neighbours[t] > max_type.value) max_type = { type: t, value: this_point_neighbours[t] };
+				}
+			}
+		}
+		return { point_type: this_point_type, same_points_near: same_points_near, neighbours: this_point_neighbours, max: max_type };
 	}
 
 	this.clean = function () {
 		var tmp = [];
 		var this_point_type = false;
 		var same_points_near = 0;
-		var this_point_neighbours = { };
-		// copy map
+		var neighbours = false;
+		// copy map types
 		for (var y=0;y<this.c.size[1];y++) {
 			tmp[y]=[];
 			for (var x=0;x<this.c.size[0];x++) {
@@ -149,30 +411,11 @@ var land = function (c) {
 			}
 		}
 
-		for (var y=1;y<this.c.size[1]-1;y++) {
-			for (var x=1;x<this.c.size[0]-1;x++) {
-				this_point_type = this.m[y][x].type;
-				this_point_neighbours = {};
-				same_points_near = 0;
-				for (var ny = y-1; ny <= y+1; ny++) {
-					for (var nx = x-1; nx <= x+1; nx++) {
-						if (this.m[ny][nx].type == this_point_type) {
-							same_points_near++;
-						} else {
-							if (typeof this_point_neighbours[this.m[ny][nx].type] == 'undefined') this_point_neighbours[this.m[ny][nx].type]=0;
-							this_point_neighbours[this.m[ny][nx].type]++;
-						}
-					}
-				}
-				if (same_points_near === 1) {	// only this point
-					same_points_near = 0;
-					for (var point_type in this_point_neighbours) {
-						if (typeof this_point_neighbours[point_type] !='undefined' && this_point_neighbours[point_type]>same_points_near) {
-							same_points_near = this_point_neighbours[point_type];
-							this_point_type = point_type;
-						}
-					}
-					tmp[y][x] = this_point_type;
+		for (var y=0;y<this.c.size[1];y++) {
+			for (var x=0;x<this.c.size[0];x++) {
+				neighbours = this._neighbours([x,y],1);
+				if (neighbours.same_points_near === 1) {	// only this point
+					tmp[y][x] = neighbours.max.type;
 				}
 			}
 		}
@@ -211,10 +454,21 @@ var land = function (c) {
 		var r = [ false, false ];
 		// prepare graph for [javascript-astar](https://github.com/bgrins/javascript-astar)
 		var g = [];
+		for (var x=0;x<this.c.size[0];x++) {
+			g[x] = [];
+			for (var y=0;y<this.c.size[1];y++) {
+				g[x][y] = 0;
+			}
+		}
 		for (var y=0;y<this.c.size[1];y++) {
-			g[y] = [];
 			for (var x=0;x<this.c.size[0];x++) {
-				g[y][x] = (map[y][x]*this.rnd(1,10))+1;	// value should be bigger that 1, or will be set as "wall"
+				if (map[y][x] > this.c.rivers.from[1]) {
+					g[x][y]=0;	// wall
+				} else if (map[y][x]>=this.c.rivers.from[0] && map[y][x]<=this.c.rivers.from[1]) {
+					g[x][y] = (map[y][x]*100+this.rnd(300,500))+1;
+				} else {
+					g[x][y] = (map[y][x]*100+this.rnd(0,100))+1;	// value should be bigger that 1, or will be set as "wall"
+				}
 				if (map[y][x]>=this.c.rivers.from[0] && map[y][x]<=this.c.rivers.from[1]) {
 					starts.push([x,y]);
 				}
@@ -223,12 +477,12 @@ var land = function (c) {
 					// Yep, this will overlap left/right and top/bottom
 					if (x>=0 && x<this.c.coast.distance) {
 						where = 'left';
+					} else if (y>=this.c.size[1]-this.c.coast.distance && y<this.c.size[1]) {
+						where = 'bottom';
 					} else if (x>=this.c.size[0]-this.c.coast.distance && x<this.c.size[0]) {
-						where = 'right'
+						where = 'right';
 					} else if (y>=0 && y<this.c.coast.distance) {
 						where = 'top';
-					} else if (y>=this.c.size[1]-this.c.coast.distance && y<this.c.size[1]) {
-						where = 'bottom'
 					}
 					if (where !== false)  {
 						ends[where].push([x,y]);
@@ -288,14 +542,25 @@ var land = function (c) {
 	this._river_draw = function (map, river) {
 		var water_value = 0.34;
 		var step = 1.5/(river.length-1);	// first value is the bigest brush "radius" ("square" radius, I don't want to use sin/cos)
+		var walkable = 10;	// every 10 tiles, river should be "walkable" for roads
+		var w_id = 0;
+		var rw = 0;	// road could be there
 		for (var j = 0; j < river.length; j++) {
 			if (map[river[j].y][river[j].x]>water_value) {
-				this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river');
+				if (w_id>=walkable) {
+					rw = 1;
+					w_id = 0;
+				} else {
+					rw = 0;
+				}
+				//this._depth_brush (map, [river[j].x, river[j].y], step*j, water_value, 'river', { w: Math.round((1-j/river.length)*5+5)/10, rw:0 });
+				this._depth_brush (map, [river[j].x, river[j].y], 0, water_value, 'river', { w: Math.round((1-j/river.length)*5+5)/10, rw: rw });
+				w_id++;
 			}
 		}
 	}
 	
-	this._depth_brush = function (map, pos, r, depth, type) {
+	this._depth_brush = function (map, pos, r, depth, type, settings) {
 		var bpos = [0,0];
 		var b = {
 				ny_min: Math.round(pos[1]-r),
@@ -305,13 +570,12 @@ var land = function (c) {
 			};
 		for (var ny = b.ny_min; ny <= b.ny_max ; ny++) {
 			for (var nx = b.nx_min; nx <= b.nx_max; nx++) {
-				//bpos = [Math.round(nx), Math.round(ny)];
-				//bpos = [parseInt(nx), parseInt(ny)];
 				bpos = [nx, ny];
 				if (bpos[0]>=0 && bpos[1]>=0 && bpos[0]<this.c.size[0] && bpos[1]<this.c.size[1]) {map[bpos[1]][bpos[0]] = depth;}
 				if (type == 'river') {
 					// TODO set ID of the river?
-					try {this.rivers_map[bpos[1]][bpos[0]]=1;} catch (e) { /* nah */ }
+					// TODO set one or two dots for roads
+					try {this.rivers_map[bpos[1]][bpos[0]]=settings;} catch (e) { /* nah */ }
 				}
 			}
 		}
@@ -366,11 +630,36 @@ var land = function (c) {
 	
 	this._smooth = function (map, v) {
 		var newmap = [];
-		var l = map.length
-		for (var y=0;y<l;y++) {
-			newmap[y] = [];
-			for (var x=0;x<l;x++) {
-				newmap[y][x] = this._smooth_avg(map , [x,y], v);
+		if (this.use_canvas_smooth) {	// TODO
+			/*var img_data = this._smooth_ctx.createImageData(this._terrain_size+1, this._terrain_size+1);
+			i=0;
+			for (var y=0;y<=map.length;y++) {
+				newmap[y] = [];
+				for (var x=0;x<=map[y].length;x++) {
+					img_data.data[i]   = 255*map[y][x];	// less levels, yep (use other channels, as it is 256^4 )
+					img_data.data[i+1] = 0;
+					img_data.data[i+2] = 0;
+					img_data.data[i+3] = 255;
+					i+=4;
+				}
+			}
+			this._smooth_ctx.putImageData(img_data,0,0);
+			this._smooth_ctx._blurRect(0, 0, this._terrain_size+1, this._terrain_size+1, v);
+			i=0;
+			img_data = this._smooth_ctx.getImageData(0,0,this._terrain_size+1, this._terrain_size+1);
+			for (var y=0;y<=this._terrain_size;y++) {
+				for (var x=0;x<=this._terrain_size;x++) {
+					newmap[y][x]=img_data.data[i]/255;
+					i+=4;
+				}
+			}*/
+
+		} else {
+			for (var y=0;y<map.length;y++) {
+				newmap[y] = [];
+				for (var x=0;x<map[y].length;x++) {
+					newmap[y][x] = this._smooth_avg(map , [x,y], v);
+				}
 			}
 		}
 		return newmap;
@@ -385,12 +674,14 @@ var land = function (c) {
 				nx_min: pos[0]-d,
 				nx_max: pos[0]+d
 			};
+		if (b.ny_min < 0) b.ny_min = 0;
+		if (b.nx_min < 0) b.nx_min = 0;
+		if (b.ny_max > map.length-1) b.ny_max = map.length-1;
+		if (b.nx_max > map[0].length-1) b.nx_max = map[0].length-1;
 		for (var y = b.ny_min; y <= b.ny_max; y++) {
 			for (var x = b.nx_min; x <= b.nx_max; x++) {
-				if (typeof map[y] != 'undefined' && typeof[map[y][x]] != 'undefined' && map[y][x]<=1 && map[y][x]>=0) {
-					s += map[y][x];
-					c++;
-				}
+				s += map[y][x];
+				c++;
 			}
 		}
 		return s/c;
@@ -399,10 +690,13 @@ var land = function (c) {
 	// help functions
 
 	this.distance = function (pos0, pos1) {
-		return Math.round(Math.sqrt(Math.pow(pos0[0]-pos1[0],2)+Math.pow(pos0[1]+pos1[1],2)));
+		return Math.round(Math.sqrt(Math.pow(pos0[0]-pos1[0],2)+Math.pow(pos0[1]-pos1[1],2)));
 	}
 	this.rnd = function (min, max) {
 		return parseInt((Math.random()*(max-min+1)+min));
+	}
+	this.isset = function (v) {
+		return (typeof v != 'undefined');
 	}
 	
 	this.shuffle = function (arr) {
