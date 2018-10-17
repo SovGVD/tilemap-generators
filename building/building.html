@@ -1,0 +1,37 @@
+<html>
+<head>
+	<title>untitled</title>
+	<script src="/../libs/javascript-astar/astar.js"></script>
+	<script src="building.js"></script>
+	<script src="tile_map.js"></script>
+</head>
+
+<body>
+
+<div id="dbg" style="display: block;">
+</div>
+
+
+<script>
+	var myBuilding = new building({
+			size: [128, 64],	// [w,h]
+			builing: {
+				levels: {
+					value: 3,
+					equal: true,	// same placeholder structure for all levels
+				}
+			},
+			units: {
+				max: [4,3],	// should be equal aspect ratio as size, corridors will be draw along longest side
+			},
+			rooms: {
+				value: [3, 6], // rooms in units
+			},
+		});
+	
+	var map = new tileMap (document.getElementById("dbg"));
+		map.display(myBuilding.get())
+</script>	
+</body>
+
+</html>
